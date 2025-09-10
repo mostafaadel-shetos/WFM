@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Freshchat Workforce Dashboard</title>
+    <title>Workforce Dashboard</title>
     <!-- Use the Inter font from Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -32,22 +32,6 @@
             background-color: #fee2e2;
             color: #991b1b;
         }
-        .message-box {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 1rem;
-            border-radius: 0.5rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            z-index: 1000;
-            transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
-            opacity: 0;
-            transform: translateY(-20px);
-        }
-        .message-box.show {
-            opacity: 1;
-            transform: translateY(0);
-        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen p-8">
@@ -56,7 +40,7 @@
     <div class="max-w-7xl mx-auto">
         <div class="bg-white rounded-xl shadow-lg p-8">
             <div class="flex items-center justify-between mb-8">
-                <h1 class="text-3xl font-bold text-gray-800">Freshchat Workforce Dashboard</h1>
+                <h1 class="text-3xl font-bold text-gray-800">Workforce Dashboard</h1>
                 <span id="last-updated" class="text-sm text-gray-500"></span>
             </div>
 
@@ -101,9 +85,6 @@
         </div>
     </div>
     
-    <!-- Message box for errors or success -->
-    <div id="message-box" class="message-box"></div>
-
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const totalAgentsEl = document.getElementById('total-agents');
@@ -115,24 +96,20 @@
             const lastUpdatedEl = document.getElementById('last-updated');
             const loadingMessageEl = document.getElementById('loading-message');
             const errorMessageEl = document.getElementById('error-message');
-            const messageBox = document.getElementById('message-box');
 
             // --- IMPORTANT: Replace with your actual Freshchat API Key and Account ID ---
             // The Freshchat API requires an Account ID in the header, not a URL.
             // You can find your API key and Account ID in your Freshchat account settings.
             // WARNING: Storing API keys in client-side code is not secure for production.
-            // For a real-world application, you should use a server-side proxy to handle API calls.
-            const FRESHCHAT_API_KEY = 'eyJraWQiOiJjdXN0b20tb2F1dGgta2V5aWQiLCJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJmcmVzaGNoYXQiLCJzdWIiOiJiZGFlNzdlMS01NzM1LTQ0MTgtYmQ1Yi01YjgyMmE0NTc1MDIiLCJjbGllbnRJZCI6ImZjLTEzMzk4NjRhLTgzNzYtNGM3MC1iOGM1LTJlYmUzZjhjNjY1MSIsInNjb3BlIjoiYWdlbnQ6cmVhZCBhZ2VudDpjcmVhdGUgYWdlbnQ6dXBkYXRlIGFnZW50OmRlbGV0ZSBjb252ZXJzYXRpb246Y3JlYXRlIGNvbnZlcnNhdGlvbjpyZWFkIGNvbnZlcnNhdGlvbjp1cGRhdGUgbWVzc2FnZTpjcmVhdGUgbWVzc2FnZTpnZXQgYmlsbGluZzp1cGRhdGUgcmVwb3J0czpmZXRjaCByZXBvcnRzOmV4dHJhY3QgcmVwb3J0czpyZWFkIHJlcG9ydHM6ZXh0cmFjdDpyZWFkIGFjY291bnQ6cmVhZCBkYXNoYm9hcmQ6cmVhZCB1c2VyOnJlYWQgdXNlcjpjcmVhdGUgdXNlcjp1cGRhdGUgdXNlcjpkZWxldGUgb3V0Ym91bmRtZXNzYWdlOnNlbmQgb3V0Ym91bmRtZXNzYWdlOmdldCBtZXNzYWdpbmctY2hhbm5lbHM6bWVzc2FnZTpzZW5kIG1lc3NhZ2luZy1jaGFubmVsczptZXNzYWdlOmdldCBtZXNzYWdpbmctY2hhbm5lbHM6dGVtcGxhdGU6Y3JlYXRlIG1lc3NhZ2luZy1jaGFubmVsczp0ZW1wbGF0ZTpnZXQgZmlsdGVyaW5ib3g6cmVhZCBmaWx0ZXJpbmJveDpjb3VudDpyZWFkIHJvbGU6cmVhZCBpbWFnZTp1cGxvYWQiLCJpc3MiOiJmcmVzaGNoYXQiLCJ0eXAiOiJCZWFyZXIiLCJleHAiOjIwMDc3NDUxMjcsImlhdCI6MTY5MjEyNTkyNywianRpIjoiZDZkODk5OTEtYWU5Zi00MDQyLWJkZWMtYTU1ZmUyZDg3MmRhIn0.wj8lTFHKb_s2Bamk6ftNg60Iba4IPByWC9eVoQHOujI'; 
+            // For a real-world application, you must use a server-side proxy to handle API calls.
+            const FRESHCHAT_API_KEY = 'eyJraWQiOiJjdXN0b20tb2F1dGgta2V5aWQiLCJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJmcmVzaGNoYXQiLCJzdWIiOiJiZGFlNzdlMS01NzM1LTQ0MTgtYmQ1Yi01YjgyMmE0NTc1MDIiLCJjbGllbnRJZCI6ImZjLTEzMzk4NjRhLTgzNzYtNGM3MC1iOGM1LTJlYmUzZjhjNjY1MSIsInNjb3BlIjoiYWdlbnQ6cmVhZCBhZ2VudDpjcmVhdGUgYWdlbnQ6dXBkYXRlIGFnZW50OmRlbGV0ZSBjb252ZXJzYXRpb246Y3JlYXRlIGNvbnZlcnNhdGlvbjpyZWFkIGNvbnZlcnNhdGlvbjp1cGRhdGUgbWVzc2FnZTpjcmVhdGUgbWVzc2FnZTpnZXQgYmlsbGluZzp1cGRhdGUgcmVwb3J0czpmZXRjaCByZXBvcnRzOmV4dHJhY3QgcmVwb3J0czpyZWFkIHJlcG9ydHM6ZXh0cmFjdDpyZWFkIGFjY291bnQ6cmVhZCBkYXNoYm9hcmQ6cmVhZCB1c2VyOnJlYWQgdXNlcjpjcmVhdGUgdXNlcjp1cGRhdGUgdXNlcjpkZWxldGUgb3V0Ym91bmRtZXNzYWdlOnNlbmQgb3V0Ym91bmRtZXNzYWdlOmdldCBtZXNzYWdpbmctY2hhbm5lbHM6bWVzc2FnZTpzZW5kIG1lc3NhZ2luZy1jaGFubmVsczptZXNzYWdlOmdldCBtZXNzYWdpbmctY2hhbm5lbHM6dGVtcGxhdGU6Y3JlYXRlIG1lc3NhZ2luZy1jaGFubmVsczp0ZW1wbGF0ZTpnZXQgZmlsdGVyaW5ib3g6cmVhZCBmaWx0ZXJpbmJveDpjb3VudDpyZWFkIHJvbGU6cmVhZCBpbWFnZTp1cGxvYWQiLCJpc3MiOiJmcmVzaGNoYXQiLCJ0eXAiOiJCZWFyZXIiLCJleHAiOjIwMDc3NDUxMjcsImlhdCI6MTY5MjEyNTkyNywianRpIjoiZDZkODk5OTEtYWU5Zi00MDQyLWJkZWMtYTU1ZmUyZDg3MmRhIn0.wj8lTFHKb_s2Bamk6ftNg60Iba4IPByWC9eVoQHOujI';
             const FRESHCHAT_ACCOUNT_ID = '770177527280330';
-            // You can use the URL for reference, but the ID is required for the header.
-            const FRESHCHAT_ACCOUNT_URL = 'https://tempo-606018293146678274-869026d6297b73c16908009.freshchat.com/v2';
             // -------------------------------------------------------------------------
 
             const FRESHCHAT_API_URL = `https://api.freshchat.com/v2/agents`;
             const MAX_BREAK_TIME_MINUTES = 15;
             
             // Define your list of AUX codes and their descriptions here.
-            // This object is used to map a code to its description for display.
             const auxCodes = {
                 '001': '1:1',
                 '002': 'Break',
@@ -149,42 +126,30 @@
                 '013': 'Technical'
             };
             
-            // Function to show a temporary message box
-            const showMessageBox = (message, className) => {
-                messageBox.textContent = message;
-                messageBox.className = `message-box ${className} show`;
-                setTimeout(() => {
-                    messageBox.classList.remove('show');
-                }, 5000);
-            };
-
             const fetchAgentData = async () => {
                 loadingMessageEl.classList.remove('hidden');
                 errorMessageEl.classList.add('hidden');
                 agentsListEl.innerHTML = '';
                 auxStatusContainerEl.innerHTML = '';
 
-                // Check for placeholder credentials and provide a clear message
-                if (FRESHCHAT_API_KEY === 'eyJhdWQiOiJmcmVzaGNoYXQiLCJzdWIiOiJiZGFlNzdlMS01NzM1LTQ0MTgtYmQ1Yi01YjgyMmE0NTc1MDIiLCJjbGllbnRJZCI6ImZjLTEzMzk4NjRhLTgzNzYtNGM3MC1iOGM1LTJlYmUzZjhjNjY1MSIsInNjb3BlIjoiYWdlbnQ6cmVhZCBhZ2VudDpjcmVhdGUgYWdlbnQ6dXBkYXRlIGFnZW50OmRlbGV0ZSBjb252ZXJzYXRpb246Y3JlYXRlIGNvbnZlcnNhdGlvbjpyZWFkIGNvbnZlcnNhdGlvbjp1cGRhdGUgbWVzc2FnZTpjcmVhdGUgbWVzc2FnZTpnZXQgYmlsbGluZzp1cGRhdGUgcmVwb3J0czpmZXRjaCByZXBvcnRzOmV4dHJhY3QgcmVwb3J0czpyZWFkIHJlcG9ydHM6ZXh0cmFjdDpyZWFkIGFjY291bnQ6cmVhZCBkYXNoYm9hcmQ6cmVhZCB1c2VyOnJlYWQgdXNlcjpjcmVhdGUgdXNlcjp1cGRhdGUgdXNlcjpkZWxldGUgb3V0Ym91bmRtZXNzYWdlOnNlbmQgb3V0Ym91bmRtZXNzYWdlOmdldCBtZXNzYWdpbmctY2hhbm5lbHM6bWVzc2FnZTpzZW5kIG1lc3NhZ2luZy1jaGFubmVsczptZXNzYWdlOmdldCBtZXNzYWdpbmctY2hhbm5lbHM6dGVtcGxhdGU6Y3JlYXRlIG1lc3NhZ2luZy1jaGFubmVsczp0ZW1wbGF0ZTpnZXQgZmlsdGVyaW5ib3g6cmVhZCBmaWx0ZXJpbmJveDpjb3VudDpyZWFkIHJvbGU6cmVhZCBpbWFnZTp1cGxvYWQiLCJpc3MiOiJmcmVzaGNoYXQiLCJ0eXAiOiJCZWFyZXIiLCJleHAiOjIwMDc3NDUxMjcsImlhdCI6MTY5MjEyNTkyNywianRpIjoiZDZkODk5OTEtYWU5Zi00MDQyLWJkZWMtYTU1ZmUyZDg3MmRhIn0.wj8lTFHKb_s2Bamk6ftNg60Iba4IPByWC9eVoQHOujI' || FRESHCHAT_ACCOUNT_ID === '770177527280330') {
+                if (FRESHCHAT_API_KEY === 'eyJraWQiOiJjdXN0b20tb2F1dGgta2V5aWQiLCJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJmcmVzaGNoYXQiLCJzdWIiOiJiZGFlNzdlMS01NzM1LTQ0MTgtYmQ1Yi01YjgyMmE0NTc1MDIiLCJjbGllbnRJZCI6ImZjLTEzMzk4NjRhLTgzNzYtNGM3MC1iOGM1LTJlYmUzZjhjNjY1MSIsInNjb3BlIjoiYWdlbnQ6cmVhZCBhZ2VudDpjcmVhdGUgYWdlbnQ6dXBkYXRlIGFnZW50OmRlbGV0ZSBjb252ZXJzYXRpb246Y3JlYXRlIGNvbnZlcnNhdGlvbjpyZWFkIGNvbnZlcnNhdGlvbjp1cGRhdGUgbWVzc2FnZTpjcmVhdGUgbWVzc2FnZTpnZXQgYmlsbGluZzp1cGRhdGUgcmVwb3J0czpmZXRjaCByZXBvcnRzOmV4dHJhY3QgcmVwb3J0czpyZWFkIHJlcG9ydHM6ZXh0cmFjdDpyZWFkIGFjY291bnQ6cmVhZCBkYXNoYm9hcmQ6cmVhZCB1c2VyOnJlYWQgdXNlcjpjcmVhdGUgdXNlcjp1cGRhdGUgdXNlcjpkZWxldGUgb3V0Ym91bmRtZXNzYWdlOnNlbmQgb3V0Ym91bmRtZXNzYWdlOmdldCBtZXNzYWdpbmctY2hhbm5lbHM6bWVzc2FnZTpzZW5kIG1lc3NhZ2luZy1jaGFubmVsczptZXNzYWdlOmdldCBtZXNzYWdpbmctY2hhbm5lbHM6dGVtcGxhdGU6Y3JlYXRlIG1lc3NhZ2luZy1jaGFubmVsczp0ZW1wbGF0ZTpnZXQgZmlsdGVyaW5ib3g6cmVhZCBmaWx0ZXJpbmJveDpjb3VudDpyZWFkIHJvbGU6cmVhZCBpbWFnZTp1cGxvYWQiLCJpc3MiOiJmcmVzaGNoYXQiLCJ0eXAiOiJCZWFyZXIiLCJleHAiOjIwMDc3NDUxMjcsImlhdCI6MTY5MjEyNTkyNywianRpIjoiZDZkODk5OTEtYWU5Zi00MDQyLWJkZWMtYTU1ZmUyZDg3MmRhIn0.wj8lTFHKb_s2Bamk6ftNg60Iba4IPByWC9eVoQHOujI' || FRESHCHAT_ACCOUNT_ID === '770177527280330') {
                     errorMessageEl.textContent = 'Please update the API key and Account ID in the code.';
                     errorMessageEl.classList.remove('hidden');
                     loadingMessageEl.classList.add('hidden');
-                    showMessageBox('API credentials are not set. Please update the file.', 'bg-red-500 text-white');
                     return [];
                 }
 
                 try {
-                    const response = await fetch('https://api.freshchat.com/v2/agents', {
+                    const response = await fetch(FRESHCHAT_API_URL, {
                         method: 'GET',
                         headers: {
-                            'Authorization': `Bearer ${eyJhdWQiOiJmcmVzaGNoYXQiLCJzdWIiOiJiZGFlNzdlMS01NzM1LTQ0MTgtYmQ1Yi01YjgyMmE0NTc1MDIiLCJjbGllbnRJZCI6ImZjLTEzMzk4NjRhLTgzNzYtNGM3MC1iOGM1LTJlYmUzZjhjNjY1MSIsInNjb3BlIjoiYWdlbnQ6cmVhZCBhZ2VudDpjcmVhdGUgYWdlbnQ6dXBkYXRlIGFnZW50OmRlbGV0ZSBjb252ZXJzYXRpb246Y3JlYXRlIGNvbnZlcnNhdGlvbjpyZWFkIGNvbnZlcnNhdGlvbjp1cGRhdGUgbWVzc2FnZTpjcmVhdGUgbWVzc2FnZTpnZXQgYmlsbGluZzp1cGRhdGUgcmVwb3J0czpmZXRjaCByZXBvcnRzOmV4dHJhY3QgcmVwb3J0czpyZWFkIHJlcG9ydHM6ZXh0cmFjdDpyZWFkIGFjY291bnQ6cmVhZCBkYXNoYm9hcmQ6cmVhZCB1c2VyOnJlYWQgdXNlcjpjcmVhdGUgdXNlcjp1cGRhdGUgdXNlcjpkZWxldGUgb3V0Ym91bmRtZXNzYWdlOnNlbmQgb3V0Ym91bmRtZXNzYWdlOmdldCBtZXNzYWdpbmctY2hhbm5lbHM6bWVzc2FnZTpzZW5kIG1lc3NhZ2luZy1jaGFubmVsczptZXNzYWdlOmdldCBtZXNzYWdpbmctY2hhbm5lbHM6dGVtcGxhdGU6Y3JlYXRlIG1lc3NhZ2luZy1jaGFubmVsczp0ZW1wbGF0ZTpnZXQgZmlsdGVyaW5ib3g6cmVhZCBmaWx0ZXJpbmJveDpjb3VudDpyZWFkIHJvbGU6cmVhZCBpbWFnZTp1cGxvYWQiLCJpc3MiOiJmcmVzaGNoYXQiLCJ0eXAiOiJCZWFyZXIiLCJleHAiOjIwMDc3NDUxMjcsImlhdCI6MTY5MjEyNTkyNywianRpIjoiZDZkODk5OTEtYWU5Zi00MDQyLWJkZWMtYTU1ZmUyZDg3MmRhIn0.wj8lTFHKb_s2Bamk6ftNg60Iba4IPByWC9eVoQHOujI}`,
-                            'X-Freshchat-Account-ID': '770177527280330',
-                            'Content-Type': 'application/Html'
+                            'Authorization': `Bearer ${eyJraWQiOiJjdXN0b20tb2F1dGgta2V5aWQiLCJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJmcmVzaGNoYXQiLCJzdWIiOiJiZGFlNzdlMS01NzM1LTQ0MTgtYmQ1Yi01YjgyMmE0NTc1MDIiLCJjbGllbnRJZCI6ImZjLTEzMzk4NjRhLTgzNzYtNGM3MC1iOGM1LTJlYmUzZjhjNjY1MSIsInNjb3BlIjoiYWdlbnQ6cmVhZCBhZ2VudDpjcmVhdGUgYWdlbnQ6dXBkYXRlIGFnZW50OmRlbGV0ZSBjb252ZXJzYXRpb246Y3JlYXRlIGNvbnZlcnNhdGlvbjpyZWFkIGNvbnZlcnNhdGlvbjp1cGRhdGUgbWVzc2FnZTpjcmVhdGUgbWVzc2FnZTpnZXQgYmlsbGluZzp1cGRhdGUgcmVwb3J0czpmZXRjaCByZXBvcnRzOmV4dHJhY3QgcmVwb3J0czpyZWFkIHJlcG9ydHM6ZXh0cmFjdDpyZWFkIGFjY291bnQ6cmVhZCBkYXNoYm9hcmQ6cmVhZCB1c2VyOnJlYWQgdXNlcjpjcmVhdGUgdXNlcjp1cGRhdGUgdXNlcjpkZWxldGUgb3V0Ym91bmRtZXNzYWdlOnNlbmQgb3V0Ym91bmRtZXNzYWdlOmdldCBtZXNzYWdpbmctY2hhbm5lbHM6bWVzc2FnZTpzZW5kIG1lc3NhZ2luZy1jaGFubmVsczptZXNzYWdlOmdldCBtZXNzYWdpbmctY2hhbm5lbHM6dGVtcGxhdGU6Y3JlYXRlIG1lc3NhZ2luZy1jaGFubmVsczp0ZW1wbGF0ZTpnZXQgZmlsdGVyaW5ib3g6cmVhZCBmaWx0ZXJpbmJveDpjb3VudDpyZWFkIHJvbGU6cmVhZCBpbWFnZTp1cGxvYWQiLCJpc3MiOiJmcmVzaGNoYXQiLCJ0eXAiOiJCZWFyZXIiLCJleHAiOjIwMDc3NDUxMjcsImlhdCI6MTY5MjEyNTkyNywianRpIjoiZDZkODk5OTEtYWU5Zi00MDQyLWJkZWMtYTU1ZmUyZDg3MmRhIn0.wj8lTFHKb_s2Bamk6ftNg60Iba4IPByWC9eVoQHOujI}`,
+                            'X-Freshchat-Account-ID': 770177527280330,
+                            'Content-Type': 'application/json'
                         }
                     });
 
                     if (!response.ok) {
-                        // This block will catch HTTP errors (e.g., 401, 403, 404)
                         const errorData = await response.json();
                         throw new Error(`API Error: ${response.status} - ${errorData.message || 'Unknown error'}`);
                     }
@@ -192,32 +157,17 @@
                     const data = await response.json();
                     
                     // --- SIMULATED DATA FOR DEMO ---
-                    // The following section simulates Freshchat API data.
-                    // In a real integration, the API response would contain
-                    // the agent's status and break code in its payload.
-                    // You would replace this logic with proper Freshchat response parsing.
                     const now = Date.now();
-                    return data.agents.map((agent, index) => {
-                        let status = agent.available ? 'Available' : 'On Break';
-                        let auxCode = null;
-                        let breakStartTime = null;
-
-                        // Simulate agents on specific AUX codes
-                        if (!agent.available) {
-                            const auxKeys = Object.keys(auxCodes);
-                            const selectedAux = auxKeys[index % auxKeys.length];
-                            status = selectedAux; // The status is now the AUX code
-                            auxCode = selectedAux;
-                            breakStartTime = now - (Math.random() * 30 * 60 * 1000); // Random break time
-                        }
-                        
+                    const mockAgents = data.agents || [];
+                    return mockAgents.map(agent => {
+                        let status = agent.available ? 'Available' : (agent.aux_code || 'On Break');
                         return {
                             id: agent.id,
                             name: agent.first_name + ' ' + agent.last_name,
                             status: status,
-                            auxCode: auxCode,
-                            breakStartTime: breakStartTime,
-                            loginTime: agent.created_at ? new Date(agent.created_at).toLocaleString() : 'N/A'
+                            auxCode: agent.aux_code || null,
+                            breakStartTime: agent.break_start || null,
+                            loginTime: new Date(agent.created_at).toLocaleString()
                         };
                     });
                     // --- END SIMULATED DATA ---
@@ -225,7 +175,6 @@
                 } catch (error) {
                     errorMessageEl.textContent = `Failed to fetch agent data. ${error.message}. This is likely due to a CORS policy. To fix this, you will need to use a server-side proxy to make the API call.`;
                     errorMessageEl.classList.remove('hidden');
-                    showMessageBox(`Error: ${error.message}. Please check the console for details on the CORS issue.`, 'bg-red-500 text-white');
                     console.error('Error fetching Freshchat data:', error);
                     return [];
                 } finally {
@@ -236,6 +185,8 @@
             const updateDashboard = async () => {
                 const agents = await fetchAgentData();
                 if (agents.length === 0) {
+                    loadingMessageEl.textContent = 'No agent data found. Check your configuration.';
+                    loadingMessageEl.classList.remove('hidden');
                     return;
                 }
                 
@@ -335,7 +286,7 @@
 
                 // Calculate and update summary metrics
                 const availableCount = agents.filter(a => a.status === 'Available').length;
-                const onBreakCount = agents.filter(a => a.status in auxCodes).length;
+                const onBreakCount = agents.filter(a => a.auxCode).length;
                 const exceededCount = agents.filter(a => a.status === 'Exceeded Break').length;
                 const totalCount = agents.length;
 
@@ -356,6 +307,3 @@
     </script>
 </body>
 </html>
-
-
-
