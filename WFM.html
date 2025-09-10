@@ -128,7 +128,7 @@
             const FRESHCHAT_ACCOUNT_URL = 'https://tempo-606018293146678274-869026d6297b73c16908009.freshchat.com/v2';
             // -------------------------------------------------------------------------
 
-            const FRESHCHAT_API_URL = `https://api.tempo-606018293146678274-869026d6297b73c16908009.freshchat.com/v2 `;
+            const FRESHCHAT_API_URL = `https://api.freshchat.com/v2/agents`;
             const MAX_BREAK_TIME_MINUTES = 15;
             
             // Define your list of AUX codes and their descriptions here.
@@ -221,9 +221,9 @@
                     // --- END SIMULATED DATA ---
 
                 } catch (error) {
-                    errorMessageEl.textContent = `Failed to fetch agent data. ${error.message}`;
+                    errorMessageEl.textContent = `Failed to fetch agent data. ${error.message}. This is likely due to a CORS policy. To fix this, you will need to use a server-side proxy to make the API call.`;
                     errorMessageEl.classList.remove('hidden');
-                    showMessageBox(`Error: ${error.message}`, 'bg-red-500 text-white');
+                    showMessageBox(`Error: ${error.message}. Please check the console for details on the CORS issue.`, 'bg-red-500 text-white');
                     console.error('Error fetching Freshchat data:', error);
                     return [];
                 } finally {
@@ -354,7 +354,3 @@
     </script>
 </body>
 </html>
-
-
-
-
