@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Freshchat Workforce Dashboard</title>
+    <!-- Use the Inter font from Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+        .status-available {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+        .status-on-break {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+        .status-exceeded {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+        .message-box {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+        .message-box.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+
+    <!-- Main container for the dashboard -->
+    <div class="max-w-7xl mx-auto">
+        <div class="bg-white rounded-xl shadow-lg p-8">
+            <div class="flex items-center justify-between mb-8">
+                <h1 class="text-3xl font-bold text-gray-800">Freshchat Workforce Dashboard</h1>
+                <span id="last-updated" class="text-sm text-gray-500"></span>
+            </div>
+
+            <!-- Summary metrics -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="bg-indigo-50 rounded-lg p-6 shadow-sm">
+                    <p class="text-sm font-medium text-indigo-600">Total Agents</p>
+                    <p id="total-agents" class="text-3xl font-bold text-indigo-900 mt-1">0</p>
+                </div>
+                <div class="bg-green-50 rounded-lg p-6 shadow-sm">
+                    <p class="text-sm font-medium text-green-600">Available</p>
+                    <p id="available-agents" class="text-3xl font-bold text-green-900 mt-1">0</p>
+                </div>
+                <div class="bg-amber-50 rounded-lg p-6 shadow-sm">
+                    <p class="text-sm font-medium text-amber-600">On Break</p>
+                    <p id="on-break-agents" class="text-3xl font-bold text-amber-900 mt-1">0</p>
+                </div>
+                <div class="bg-red-50 rounded-lg p-6 shadow-sm">
+                    <p class="text-sm font-medium text-red-600">Break Exceeded</p>
+                    <p id="exceeded-agents" class="text-3xl font-bold text-red-900 mt-1">0</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- Agents list -->
+                <div>
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Agent Status</h2>
+                    <div id="agents-list" class="bg-gray-50 rounded-lg p-6 shadow-inner space-y-4">
+                        <p id="loading-message" class="text-center text-gray-500">Loading agent data...</p>
+                        <p id="error-message" class="text-center text-red-500 hidden"></p>
+                    </div>
+                </div>
+
+                <!-- AUX Codes with Agents -->
+                <div>
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Agents on AUX</h2>
+                    <div id="aux-status-container" class="bg-gray-50 rounded-lg p-6 shadow-inner space-y-6">
+                        <!-- Dynamic AUX code groups will be rendered here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Message box for errors or success -->
+    <div id="message-box" class="message-box"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const totalAgentsEl = document.getElementById('total-agents');
+            const availableAgentsEl = document.getElementById('available-agents');
+            const onBreakAgentsEl = document.getElementById('on-break-agents');
+            const exceededAgentsEl = document.getElementById('exceeded-agents');
+            const agentsListEl = document.getElementById('agents-list');
+            const auxStatusContainerEl = document.getElementById('aux-status-container');
+            const lastUpdatedEl = document.getElementById('last-updated');
+            const loadingMessageEl = document.getElementById('loading-message');
+            const errorMessageEl = document.getElementById('error-message');
+            const messageBox = document.getElementById('message-box');
+
+            // --- IMPORTANT: Replace with your actual Freshchat API Key and Account ID ---
+            // You can find your API key and Account ID in your Freshchat account settings.
+            // WARNING: Storing API keys in client-side code is not secure for production.
+            // For a real-world application, you should use a server-side proxy to handle API calls.
+            const FRESHCHAT_API_KEY = 'YOUR_FRESHCHAT_API_KEY'; 
+            const FRESHCHAT_ACCOUNT_ID = 'YOUR_FRESHCHAT_ACCOUNT_ID';
+            // -------------------------------------------------------------------------
+
+            const FRESHCHAT_API_URL = `https://api.freshchat.com/v2/agents`;
+            const MAX_BREAK_TIME_MINUTES = 15;
+            
+            // Define your list of AUX codes and their descriptions here.
+            // This object is used to map a code to its description for display.
+            const auxCodes = {
+                '001': '1:1',
+                '002': 'Break',
+                '003': 'Meal',
+                '004': 'Personal',
+                '005': 'Coaching',
+                '006': 'Meeting',
+                '007': 'Outbound',
+                '008': 'Quality Coaching',
+                '009': 'Slack Coverage',
+                '010': 'Social Support',
+                '011': 'Task',
+                '012': 'Training',
+                '013': 'Technical'
+            };
+            
+            // Function to show a temporary message box
+            const showMessageBox = (message, className) => {
+                messageBox.textContent = message;
+                messageBox.className = `message-box ${className} show`;
+                setTimeout(() => {
+                    messageBox.classList.remove('show');
+                }, 5000);
+            };
+
+            const fetchAgentData = async () => {
+                loadingMessageEl.classList.remove('hidden');
+                errorMessageEl.classList.add('hidden');
+                agentsListEl.innerHTML = '';
+                auxStatusContainerEl.innerHTML = '';
+
+                if (FRESHCHAT_API_KEY === 'YOUR_FRESHCHAT_API_KEY' || FRESHCHAT_ACCOUNT_ID === 'YOUR_FRESHCHAT_ACCOUNT_ID') {
+                    errorMessageEl.textContent = 'Please update the API key and Account ID in the code.';
+                    errorMessageEl.classList.remove('hidden');
+                    loadingMessageEl.classList.add('hidden');
+                    showMessageBox('API credentials are not set. Please update the file.', 'bg-red-500 text-white');
+                    return [];
+                }
+
+                try {
+                    const response = await fetch(FRESHCHAT_API_URL, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${FRESHCHAT_API_KEY}`,
+                            'X-Freshchat-Account-ID': FRESHCHAT_ACCOUNT_ID,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(`API Error: ${response.status} - ${errorData.message || 'Unknown error'}`);
+                    }
+
+                    const data = await response.json();
+                    
+                    // --- SIMULATED DATA FOR DEMO ---
+                    // The following section simulates Freshchat API data.
+                    // In a real integration, the API response would contain
+                    // the agent's status and break code in its payload.
+                    // You would replace this logic with proper Freshchat response parsing.
+                    const now = Date.now();
+                    return data.agents.map((agent, index) => {
+                        let status = agent.available ? 'Available' : 'On Break';
+                        let auxCode = null;
+                        let breakStartTime = null;
+
+                        // Simulate agents on specific AUX codes
+                        if (!agent.available) {
+                            const auxKeys = Object.keys(auxCodes);
+                            const selectedAux = auxKeys[index % auxKeys.length];
+                            status = selectedAux; // The status is now the AUX code
+                            auxCode = selectedAux;
+                            breakStartTime = now - (Math.random() * 30 * 60 * 1000); // Random break time
+                        }
+                        
+                        return {
+                            id: agent.id,
+                            name: agent.first_name + ' ' + agent.last_name,
+                            status: status,
+                            auxCode: auxCode,
+                            breakStartTime: breakStartTime,
+                            loginTime: agent.created_at ? new Date(agent.created_at).toLocaleString() : 'N/A'
+                        };
+                    });
+                    // --- END SIMULATED DATA ---
+
+                } catch (error) {
+                    errorMessageEl.textContent = `Failed to fetch agent data. ${error.message}`;
+                    errorMessageEl.classList.remove('hidden');
+                    showMessageBox(`Error: ${error.message}`, 'bg-red-500 text-white');
+                    console.error('Error fetching Freshchat data:', error);
+                    return [];
+                } finally {
+                    loadingMessageEl.classList.add('hidden');
+                }
+            };
+
+            const updateDashboard = async () => {
+                const agents = await fetchAgentData();
+                if (agents.length === 0) {
+                    return;
+                }
+                
+                const now = Date.now();
+                const agentsByAux = {};
+
+                // Clear both lists to prevent duplicates on refresh
+                agentsListEl.innerHTML = '';
+                auxStatusContainerEl.innerHTML = '';
+                
+                // Update agent statuses and populate agent list and AUX groups
+                agents.forEach(agent => {
+                    // Check for exceeded break time, only if it's an AUX code break
+                    if (agent.auxCode) {
+                        const breakDurationMs = now - agent.breakStartTime;
+                        const breakDurationMinutes = breakDurationMs / (1000 * 60);
+                        if (breakDurationMinutes > MAX_BREAK_TIME_MINUTES) {
+                            agent.status = 'Exceeded Break';
+                        } else {
+                            // Group agents by their AUX code
+                            if (!agentsByAux[agent.auxCode]) {
+                                agentsByAux[agent.auxCode] = [];
+                            }
+                            agentsByAux[agent.auxCode].push(agent);
+                        }
+                    }
+
+                    // Render agent in the main list
+                    const li = document.createElement('li');
+                    li.className = 'flex items-center justify-between bg-white p-4 rounded-lg shadow-sm';
+
+                    let statusText = agent.status;
+                    let breakInfo = '';
+                    let statusClass = 'status-available';
+
+                    if (agent.status === 'Available') {
+                        statusText = 'Available';
+                        statusClass = 'status-available';
+                    } else if (agent.status === 'Exceeded Break') {
+                        statusText = 'Break Exceeded';
+                        statusClass = 'status-exceeded';
+                        const durationMs = now - agent.breakStartTime;
+                        const minutes = Math.floor(durationMs / (1000 * 60));
+                        const seconds = Math.floor((durationMs % (1000 * 60)) / 1000);
+                        breakInfo = `<span class="text-sm text-red-500 font-medium ml-2">${minutes}m ${seconds}s</span>`;
+                    } else { // It's an AUX code
+                        statusText = auxCodes[agent.auxCode] || `AUX ${agent.auxCode}`;
+                        statusClass = 'status-on-break';
+                        const durationMs = now - agent.breakStartTime;
+                        const minutes = Math.floor(durationMs / (1000 * 60));
+                        const seconds = Math.floor((durationMs % (1000 * 60)) / 1000);
+                        breakInfo = `<span class="text-sm text-gray-500 ml-2">${minutes}m ${seconds}s</span>`;
+                    }
+
+                    li.innerHTML = `
+                        <div class="flex flex-col">
+                            <div class="flex items-center space-x-2">
+                                <span class="text-lg font-medium text-gray-800">${agent.name}</span>
+                                ${breakInfo}
+                            </div>
+                            <span class="text-xs text-gray-400 mt-1">First Login: ${agent.loginTime}</span>
+                        </div>
+                        <span class="status-badge ${statusClass}">${statusText}</span>
+                    `;
+                    agentsListEl.appendChild(li);
+                });
+
+                // Render the AUX codes with their respective agents
+                Object.keys(auxCodes).forEach(code => {
+                    const auxGroup = document.createElement('div');
+                    auxGroup.className = 'bg-white p-4 rounded-lg shadow-sm';
+                    const agentsOnAux = agentsByAux[code] || [];
+                    
+                    let agentListHtml = '';
+                    if (agentsOnAux.length > 0) {
+                        agentListHtml = agentsOnAux.map(agent => {
+                            const durationMs = now - agent.breakStartTime;
+                            const minutes = Math.floor(durationMs / (1000 * 60));
+                            const seconds = Math.floor((durationMs % (1000 * 60)) / 1000);
+                            return `<div class="flex items-center justify-between">
+                                        <span class="text-sm text-gray-800">${agent.name}</span>
+                                        <span class="text-xs text-gray-500">${minutes}m ${seconds}s</span>
+                                    </div>`;
+                        }).join('');
+                    } else {
+                        agentListHtml = `<p class="text-sm text-gray-400">No agents on this break.</p>`;
+                    }
+
+                    auxGroup.innerHTML = `
+                        <h3 class="text-lg font-semibold text-gray-800 mb-2">${auxCodes[code]} (${agentsOnAux.length})</h3>
+                        <div class="space-y-2">
+                            ${agentListHtml}
+                        </div>
+                    `;
+                    auxStatusContainerEl.appendChild(auxGroup);
+                });
+
+                // Calculate and update summary metrics
+                const availableCount = agents.filter(a => a.status === 'Available').length;
+                const onBreakCount = agents.filter(a => a.status in auxCodes).length;
+                const exceededCount = agents.filter(a => a.status === 'Exceeded Break').length;
+                const totalCount = agents.length;
+
+                // Update UI elements
+                totalAgentsEl.textContent = totalCount;
+                availableAgentsEl.textContent = availableCount;
+                onBreakAgentsEl.textContent = onBreakCount;
+                exceededAgentsEl.textContent = exceededCount;
+
+                // Update the "last updated" timestamp
+                lastUpdatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+            };
+
+            // Initial render and then update every 30 seconds to avoid rate limiting
+            updateDashboard();
+            setInterval(updateDashboard, 30000);
+        });
+    </script>
+</body>
+</html>
