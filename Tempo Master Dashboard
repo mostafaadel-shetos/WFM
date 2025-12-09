@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tempo Master Tool</title>
+    
+    <!-- Configure Tailwind for Manual Dark Mode (Must be before Tailwind script) -->
+    <script>
+        tailwind = {
+            config: {
+                darkMode: 'class',
+            }
+        }
+    </script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Babel for JSX transformation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* Custom scrollbar for lists */
+        .scrollbar-thin::-webkit-scrollbar {
+            width: 6px;
+        }
+        .scrollbar-thin::-webkit-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 20px;
+        }
+        .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+            background-color: #475569;
+        }
+        
+        /* Loading Spinner */
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #3b82f6;
+            width: 20px;
+            height: 20px;
+            -webkit-animation: spin 1s linear infinite; /* Safari */
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<!-- Re-applied base background class: bg-slate-50 is the default light mode background. dark:bg-slate-900 is controlled by JS on the HTML root. -->
+<body class="bg-slate-50 transition-colors duration-200">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useMemo, useRef, useEffect } from 'https://esm.sh/react@18.2.0';
+        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+        
+        // Import Firebase (Modular SDK)
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+        import { 
+            getFirestore, 
+            collection, 
+            doc, 
+            setDoc, 
+            onSnapshot,
+            writeBatch
+        } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+
+        import { 
+          Users, 
+          Search, 
+          Map as MapIcon, 
+          List, 
+          Filter, 
+          Mail, 
+          Phone, 
+          Briefcase, 
+          MapPin, 
+          Activity,
+          UserCircle,
+          Download,
+          Upload,
+          Building,
+          UserCheck,
+          Moon,
+          Sun,
+          Eye,
+          EyeOff,
+          X,
+          Calendar,
+          GraduationCap,
+          Truck,
+          MessageCircle,
+          Hash,
+          Heart,
+          User,
+          ChevronRight,
+          BarChart3,
+          ChevronDown,
+          Edit2,
+          Trash2,
+          Save,
+          PlusCircle,
+          Database
+        } from 'https://esm.sh/lucide-react@0.292.0';
+
+        // ---------------------------------------------------------
+        // FILE CONTENT ACCESS (MANDATORY USE)
+        // Global utility to access uploaded file content by ID
+        const fileContentFetcher = (contentId) => {
+            if (typeof __file_content_fetcher !== 'undefined') {
+                return __file_content_fetcher(contentId);
+            }
+            console.error('__file_content_fetcher is not defined. Cannot access uploaded files.');
+            return null;
+        };
+        // ---------------------------------------------------------
+
+
+        // ---------------------------------------------------------
+        // FIREBASE CONFIGURATION
+        // ---------------------------------------------------------
+        const FIREBASE_CONFIG = {
+            apiKey: "AIzaSyAJfMGnjV6xnN1ObOJjK7blBK0fCR0NZZk",
+            authDomain: "tempomaster1-18ac4.firebaseapp.com",
+            projectId: "tempomaster1-18ac4",
+            storageBucket: "tempomaster1-18ac4.firebasestorage.app",
+            messagingSenderId: "436233309908",
+            appId: "1:436233309908:web:48ece8321ceaec29593541",
+            measurementId: "G-ZEWW47WNHY"
+        };
+
+        // Initialize Firebase
+        let db = null;
+        try {
+            const app = initializeApp(FIREBASE_CONFIG);
+            db = getFirestore(app);
+            console.log("Firebase initialized successfully");
+        } catch (e) {
+            console.error("Firebase Init Error:", e);
+        }
+
+        // --- CONFIGURATION ---
+        // EMBEDDED DATA CONTENT (USING TAB SEPARATION)
+        // This is the specific 18-record dataset provided by the user.
+        const UPLOADED_DATA_CONTENT = `Name	ID	HR ID	Supervisor	Position	Channel	Title	Wave	Date of Birth	Joining Date	Status	Personal Email	Tempo Email	Phone Number	Route	Religion	Gender	Graduate \\ Undergraduate	End Date	Rehire Status	Reason	Headset SN	Nationality
+Salma Ramadan	253	2578	Cynthia Hernandez	HR Manager	HR Manager	HR Manager	W2	September 28, 1995	5-Jul-21	Active	salmaragab444@gmail.com	salmaramadan@tempo.fit	1093491999	N/A	Muslim	Female	N/A				H-FX016861	Egyptian
+Khaled El Sabban	234	2551	Nancy Elsharony	Operation Manager	Operation Manager	Operation Manager	W2	July 15, 1983	23-Jun-21	Active	sabbansabban@gmail.com	khaledsabban@tempo.fit	1206034066	October-Zayed	Muslim	Male	Graduated				H-FX016897	Egyptian
+Fatma Mohammed	705	705	Heba El Sobky	QA	QA	Quality Assurance associate	W8	August 14, 2002	21-Nov-22	Active	fatmamohamedxxx@gmail.com	fatma.mohammad@tempo.fit	1113276803	Mokattam	Musilm	Female	Undergraduated					Egyptian
+Hagar Alaa	816	0	Heba El Sobky	QA	QA	Quality Assurance associate	W15	August 8, 2001	29-Apr-24	Active	hagaralaa816@gmail.com	hagar.alaa@tempo.fit	1120668864	faisal	Muslim	Female	Graduated					Egyptian
+Heba El Sobky	194	2544	Nancy Elsharony	QA Lead	QA Lead	Quality Lead	W2	December 11, 1997	21-Jun-21	Active	hebasobky01@gmail.com	hebasobky@tempo.fit	1032808375	Salam/Masr El Gedida	Muslim	Female	Graduated				H-FX016864	Egyptian
+Nancy Elsharony	164	#N/A	Anna Kacius	Site Director	Site Director	Site Director	W0	March 2, 1990	25-Jan-21	Active	nancy.sharouny@gmail.com	nancy@tempo.fit	1066650469	N/A	Muslim	Female	Graduated				Not Received	Egyptian
+Ariath Piol	531	2668	Mohamed Mounir	Social Media	Social Media	Social Media	W7	September 15, 2002	25-Jul-22	Active	cavalli.quan012@gmail.com	ariath.piol@tempo.fit	"1021590628(app)\n1141796433"	Salam/Masr EL Gedida	Christian	Male	Undergraduated				H-FW022017	Forigner
+Job James	530	2667	Mohamed Mounir	Social Media	Social Media	Social Media	W7	January 1, 2003	25-Jul-22	Active	jobjam046@gmail.com	job.james@tempo.fit	1129256701	N/A	Christian	Male	N/A				H-FW021992	Forigner
+Lina Hesham	224	2550	Mohamed Mounir	Social Media	Social Media	Social Media	W2	August 29, 1994	3-Jun-24	Active	lina.hesham33@gmail.com	linahesham@tempo.fit	1094663733	N/A	Muslim	Female	Graduated					Egyptian
+Mohab Magdy	174	2520	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W1	November 30, 1989	5-Apr-21	Active	Mohabmagdy54@gmail.com	mohab.magdy@tempo.fit	1116620545	Faisal	Muslim	Male	Graduated				H-FX016874	Egyptian
+Marwa Ahmed	212	2546	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W2	October 3, 1999	21-Jun-21	Active	marwaahmed99310@gmail.com	marwa.ahmed@tempo.fit	1090443255	Salam/Masr El Gedida	Muslim	Female	Graduated				H-FX016900	Egyptian
+Ramadan Philip	519	2663	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W7	January 9, 1998	25-Jul-22	Active	ramzphil07@gmail.com	ramadan.philip@tempo.fit	1155466807	Faisal	Christian	Male	Undergraduated				H-FW021903	Forigner
+Aida Clement	755	755	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W10	January 1, 1997	6-Feb-23	Active	Aida.Clement1234@gmail.com	aida.clement@tempo.fit	1148109942	Mokattam	Christian	Female	N/A				H-FW022008	Forigner
+Hassan Khallaf	476	2598	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W4	October 9, 1990	7-Mar-22	Active	hekhallaf@admincraft.net	hassan@tempo.fit	01552222656	Madinat Nasr	Muslim	Male	Graduated				H-Fx016912	Egyptian
+Nada Ashraf	523	2656	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W7	September 9, 1994	25-Jul-22	Active	ashraf.nada68@yahoo.com	nada.ashraf@tempo.fit	1021890629	Faisal	Muslim	Female	Graduated				H-FW021993	Egyptian
+Radwa Ahmed	542	2672	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W7	July 19, 1999	25-Jul-22	Active	radwalashin1@gmail.com	radwa.ahmed@tempo.fit	1159774799	Helwan	Muslim	Female	Graduated					Egyptian
+Ruben Joseph	846	846	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W17		20-Jan-25	Active	robinjoseph019@gmail.com	ruben.joseph@tempo.fit	1116472799	Maadi	Christian	Male					-	Forigner
+Esraa Eroq	791	2741	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W11	October 30, 1999	13-Mar-23	Active	esraaeroq@gmail.com	esraa.tarek@tempo.fit	2.01201E+11	Masr el gedida	Muslim	Female	Graduated					Egyptian
+Ahmed Abdelghany	832	0	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W16	September 5, 1999	5-Aug-24	Active	ahmedabdelghanyim@gmail.com	ahmed.abdelghany@tempo.fit	1155442918	Faisal	Muslim	Male	Graduated					Egyptian
+Mohamed Kheer	848	848	Ahmed Hamed	T2/Cancellation	T2/Cancellation	T2/Cancellation	W17		20-Jan-25	Active	mohamedkhier10@gmail.com	mohamed.kheer@tempo.fit	2.49116E+11	Salam/Masr El Gedida	Muslim	Male					-	Egyptian
+Nour Ayman	849	849	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W17	August 22, 2004	20-Jan-25	Active	Naymanzakyy@gmail.com	nour.ayman@tempo.fit	1027722889	Shoubra	Muslim	Female	Undergraduated				-	Egyptian
+Ashraf Essam	850	850	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W17		20-Jan-25	Active	ashrafabuelmagd2@gmail.com	ashraf.essam@tempo.fit	0 11 01974078	Salam/Masr El Gedida	Muslim	Male					-	Egyptian
+Rima Zaki	805	0	Ahmed Hamed	T2/Cancellation	T2/Cancellation	T2/Cancellation	W13	March 17, 2003	13-Nov-23	Active	rimazakizikwa@gmail.com	"rima.khaled@tempo.fit	"	2.0106E+11	Tagamu3	Muslim	Female	Undergraduated				H-F2001616	Egyptian
+Hala Ayman	851	0	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W18	February 21, 2006	14-Jul-25	Active	haymanzaky21@gmail.com 	hala.ayman@tempo.fit	1027722887	Shoubra	Muslim	Female	Undergraduated					Egyptian
+Rania Mohamed	857	0	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W18	June 28, 1995	14-Jul-25	Active	raniamabdo24@gmail.com	rania.mohamed@tempo.fit	1068303073	Faisal	Muslim	Female	Graduated					Egyptian
+Salma Ahmed	860	0	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W18	June 21, 2001	14-Jul-25	Active	salma.ahmedd216@gmail.com	salma.ahmed@tempo.fit	1002451238	Maadi	Muslim	Female	Graduated					Egyptian
+Marwan Hassan	852	0	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W18	September 8, 2003	14-Jul-25	Active	httpsmarwan@gmail.com	marwan.hassan@tempo.fit	1032715271	October-Zayed	Muslim	Male	Undergraduated					Egyptian
+Osama M. Adam	853	0	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W18	November 14, 1981	14-Jul-25	Active	osama.adam.m@gmail.com	osama.adam@tempo.fit	1003263248	Madinat Nasr	Muslim	Male	Graduated					Egyptian
+Ahmed Ezz ElDin	854	0	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W18	April 14, 1991	14-Jul-25	Active	eyebag420@gmail.com	ahmed.ezzeldin@tempo.fit	1068581200	Shoubra	Muslim	Male	Graduated					Egyptian
+Marwan Zakaria	859	0	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W18	January 1, 2002	14-Jul-25	Active	marwanmmz1102@gmail.com	marwan.zakaria@tempo.fit	1207283000	N/A	Muslim	Male	Graduated					Egyptian
+Shahd Emad	861	0	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W19	February 14, 2003	11-Aug-25	Active	eshahd484@gmail.com	shahd.emad@tempo.fit	1024180845	Maadi	Muslim	Male	Undergraduated					
+Ahmed Nasser	862	0	Ahmed El Sawy	MX Associate-T1	MX Associate-T1	MX Associate-T1	W19	July 19, 2000	11-Aug-25	Active	an352870@gmail.com	ahmed.abdelhakim@tempo.fit	1110551034	Alf Maskan	Muslim	Female	Graduated					
+Santos Nyikang	839	839	Ahmed Hamed	T2/Cancellation	T2/Cancellation	T2/Cancellation	W17		20-Jan-25	Active	nyikangsantos@gmail.com	santos.nyikang@tempo.fit	1148770622	Salam/Masr El Gedida	Christian	Male					-	Forigner
+Youkabed Farid	759	759	Ahmed Hamed	T2/Cancellation	T2/Cancellation	T2/Cancellation	W10	July 29, 2001	6-Feb-23	Active	youkabedd0@gmail.com	youkabed.farid@tempo.fit	1025333327	Helwan	Christian	Female	Undergraduated				H-FX016873	Egyptian
+Marwan Fathi	796	2748	Ahmed Hamed	T2/Cancellation	T2/Cancellation	T2/Cancellation	W11	December 23, 1997	13-Mar-23	Active	mangawyboyka@gmail.com	marwan.fathi@tempo.fit	2.01154E+11	6th October	Muslim	Male	Graduated					Egyptian
+Emad Mohamed	467	2593	Mohamed Mounir	T2/Mentor	T2/Mentor	T2/Mentor	W3	March 15, 1986	15-Nov-21	Active	emad.elbially7@gmail.com	emad.mohamed@tempo.fit	1007307851	Salam/Masr El Gedida	Muslim	Male	Graduated				H-FX016932	Egyptian
+Rashad Mohamed	792	2742	Mohamed Mounir	T2/Mentor	T2/Mentor	T2/Mentor	W11	October 25, 2001	13-Mar-23	Active	rashadmohamed528@icloud.com	rashad.mohamed@tempo.fit	2.01051E+11	N/A	Muslim	Male	Undergraduated					Egyptian
+Noha Radwan	808	0	Mohamed Mounir	T2/Mentor	T2/Mentor	T2/Mentor	W13	July 12, 2001	13-Nov-23	Active	noha.rad.01@gmail.com	noha.radwan@tempo.fit	2.0115E+11	Tagamu3	Muslim	Female	Graduated				H-FW022015	Egyptian
+Khaled Ahmed	787	2737	Khaled El Sabban	T2/Tech	T2/Tech	T2/Tech	W11	November 3, 2001	13-Mar-23	Active	khaledyousof17@gmail.com	khaled.ahmed@tempo.fit	2.01123E+11	Maadi	Muslim	Male	Undergraduated					Egyptian
+Ahmed Mahmoud	209	2548	Khaled El Sabban	T2/Tech	T2/Tech	T2/Tech	W2	February 22, 1994	21-Jun-21	Active	Ahmedmahmoudbusiness@protonmail.com	ahmed.mahmoud@tempo.fit	1225377451	October-Zayed	muslim	Male	Graduated				H-FX016865	Egyptian
+Mohamed Mounir	180	2507	Nancy Elsharony	Team and change Integration Manager	Team Lead / Change Integration Manager	Team Lead / Change Integration Manager	W1	January 8, 1996	5-Apr-21	Active	ayadm9395@gmail.com	mohamed.abdelmagid@tempo.fit	1552600480	Tagamu3	Muslim	Male	Undergraduated				H-FX016873	Egyptian
+Ahmed Elsawy	218	2542	Khaled El Sabban	Team Lead	Team Lead	Team Lead	W2	October 21, 1996	21-Jun-21	Active	ah_abd_hameed@hotmail.com	ahmed.elsawy@tempo.fit	1204244269	Madinat Nasr	Muslim	Male	Graduated				H-FW021934	Egyptian
+Ahmed Hamed	465	2587	Khaled El Sabban	Team Lead	Team Lead	Team Lead	W3	December 4, 1991	15-Nov-21	Active	ahdabdallahmd@gmail.com	ahmed.hamed@tempo.fit	1061560805	Faisal	Muslim	Male	Graduated				H-FX016875	Forigner
+Menna Yasser	405	2583	Nancy Elsharony	Training & Development Manager	Training & Development Manager	Training & Development Manager	W2	June 21, 1995	6-Sep-21	Active	menayasser1995@gmail.com	menna@tempo.fit	1121338888	N/A	Muslim	Female	Graduated				H-FX016917	Egyptian
+Mostafa Adel	522	2660	Mohamed Halim	Workforce Analyst	Workforce Analyst	Workforce Analyst	W7	December 4, 1989	25-Jul-22	Active	mostafasalehshetos@gmail.com	mostafa.adel@tempo.fit	1111175117	Faisal	Muslim	Male	Graduated				H-FW021979	Egyptian
+Mohamed Halim	401	2582	Nancy Elsharony	Workforce Manager	Workforce Manager	Workforce Manager	W2	April 10, 1991	1-Sep-21	Active	mhalim265@gmail.com	halim@tempo.fit	1120222674	Faisal	Muslim	Male	Graduated				Not Received	Egyptian`;
+
+        // --- HIERARCHY CONFIGURATION (STRICT ORDER) ---
+        const TITLE_HIERARCHY = [
+          "Site Director",
+          "HR Manager",
+          "Operation Manager",
+          "Workforce Manager",
+          "Change Integration Manager",
+          "Training & Development Manager",
+          "QA Lead",
+          "Workforce Analyst",
+          "QA",
+          "T2/Mentor",
+          "T2/Cancellation",
+          "T2/Tech",
+          "Social Media",
+          "MX T1"
+        ];
+
+        // --- INITIAL DATA (Fallback) ---
+        const INITIAL_DATA = [];
+        
+        // --- CSV PARSING HELPER (REUSABLE) ---
+        const parseCSV = (csvText) => {
+            // FIX: Using tab separator since the data was pasted with tabs
+            const SEPARATOR = /\t/;
+            
+            const rows = csvText.trim().split('\n');
+            if (rows.length < 2) return [];
+
+            const parsedData = rows.slice(1).map((line, index) => {
+                // Split using the tab separator
+                const v = line.split(SEPARATOR).map(val => val.trim().replace(/^"|"$/g, ''));
+                
+                // Assuming 25 columns based on the header provided (including duplicates/blanks)
+                if (v.length < 25) {
+                   console.error(`Skipping row ${index + 2} due to incomplete data (expected 25 columns, found ${v.length}):`, v);
+                   return null;
+                }
+                
+                let channel = v[6] || "Unassigned";
+                // Adjusting the parsing logic based on the user's provided structure (which uses 
+                // Team Lead, Position, Channel, Title, etc.) and relying on the column indices.
+
+                // Index reference based on user's header (assuming zero-indexed):
+                // 0: Name, 1: ID, 3: Team Lead (Supervisor), 5: Position, 6: Channel, 7: Title, 14: Phone Number, 18: Graduate/Undergrad, 19: End Date
+
+                // Clean up phone number field (Index 13 in this specific dataset)
+                const rawPhoneNumber = (v[13] || "").replace(/[^0-9+\s]/g, '').replace(/\s/g, '');
+
+
+                let title = v[7] || "";
+                if (title === "Team and change Integration Manager") title = "Change Integration Manager"; // Handle mismatch
+                if (title.toLowerCase().includes("opration manager")) title = "Operation Manager";
+                if (title.toLowerCase().includes("workforce manager")) title = "Workforce Manager";
+                if (title.toLowerCase().includes("training & development manager")) title = "Training & Development Manager";
+                if (title.toLowerCase().includes("mx associate-t1")) title = "MX T1";
+                if (title.toLowerCase().includes("qa")) title = "QA";
+                if (title.toLowerCase().includes("team lead")) title = "Team Lead";
+                if (title.toLowerCase().includes("t2")) title = "T2/Cancellation";
+                
+                // Use Channel (v[6]) as LOB, but normalize T1/T2 positions to LOBs/Sub-channels.
+                // Since the provided data uses "MX Associate-T1" as the Title/Channel, we need to extract details.
+                const channelLOB = v[6] || v[7] || "MX T1"; 
+
+                return {
+                    name: v[0] || "Unknown",
+                    id: v[1] || `sheet-${index + 1}`,
+                    hr_id: v[2] || "",
+                    team_lead: v[3] || "Unassigned", // Supervisor
+                    qa_assigned: v[4] || "",       // QA Assigned (This column is missing in the 18-record set but is required)
+                    position: v[5] || "",          // Position
+                    channel: channelLOB,           // Channel (LOB)
+                    sub_channel: v[5],             // Position as sub-channel (Chat, Email, Phone etc.)
+                    title: title,                  // Standardized Title
+                    wave: v[8] || "",
+                    dob: v[9] || "",
+                    joining_date: v[10] || "",
+                    status: v[11] || "Unknown", 
+                    personal_email: v[12] || "",
+                    tempo_email: v[13] || "",
+                    phone: rawPhoneNumber,
+                    route: v[15] || "",
+                    religion: v[16] || "",
+                    gender: v[17] || "",
+                    education: v[18] || "", // Graduate/Undergraduate
+                    area: v[19] || "",             // Area (Missing in 18-record set, but keeping index for consistency)
+                    end_date: v[20] || "",         // End Date
+                    rehire_status: v[21] || "",    // Rehire Status
+                    reason: v[22] || "",           // Reason
+                    headset_sn: v[23] || "",       // Headset SN
+                    nationality: v[24] || ""       // Nationality
+                };
+            }).filter(item => item !== null && item.id.trim() !== '');
+            return parsedData;
+        };
+
+        // --- COMPONENTS ---
+
+        const StatusBadge = ({ status }) => {
+          const normalizedStatus = status ? status.toLowerCase().trim() : '';
+          let style = "bg-gray-100 text-gray-500 border-gray-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-600";
+          
+          if (normalizedStatus.includes('active')) {
+            // FIX: Corrected missing closing quote and truncated class name
+            style = "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800";
+          } else if (normalizedStatus.includes('leave')) {
+            style = "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800";
+          } else if (normalizedStatus.includes('terminated') || normalizedStatus.includes('resigned')) {
+            style = "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800";
+          }
+          
+          return (
+            <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${style} capitalize`}>
+              {status || "Unknown"}
+            </span>
+          );
+        };
+
+        // --- HELPER: AVATAR COMPONENT (UPDATED SIZES) ---
+        const UserAvatar = ({ name, photo, size = "md" }) => {
+            const sizeClasses = {
+                sm: "w-10 h-10 text-sm",
+                md: "w-20 h-20 text-3xl", // Increased for Card
+                lg: "w-32 h-32 text-5xl", // Increased for Profile
+                xl: "w-40 h-40 text-6xl"
+            };
+            const containerClass = `rounded-full flex items-center justify-center font-bold border-2 border-white dark:border-slate-700 shadow-md overflow-hidden ${sizeClasses[size]} shrink-0`;
+
+            if (photo && photo.trim() !== "") {
+                return (
+                    <div className={`${containerClass} bg-white dark:bg-slate-800`}>
+                        <img 
+                            src={getDirectImageUrl(photo)} 
+                            alt={name} 
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'flex';
+                            }}
+                        />
+                        <div className="hidden w-full h-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 items-center justify-center">
+                            {name ? name.charAt(0) : '?'}
+                        </div>
+                    </div>
+                );
+            }
+            return (
+                <div className={`${containerClass} bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400`}>
+                    {name ? name.charAt(0) : '?'}
+                </div>
+            );
+        };
+
+        // --- CHART COMPONENT ---
+        const LobChart = ({ data }) => {
+          if (!data || data.length === 0) return null;
+          const max = Math.max(...data.map(d => d.total));
+          
+          return (
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm mb-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
+                <BarChart3 size={20} className="text-blue-600 dark:text-blue-400" />
+                Headcount Distribution by LOB
+              </h3>
+              <div className="flex items-end justify-around gap-2 sm:gap-4 w-full px-2">
+                {data.map((item) => (
+                  <div key={item.name} className="flex flex-col items-center gap-2 group w-full">
+                    <div className="relative w-full h-48 flex justify-center items-end">
+                       <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs font-bold py-1.5 px-2.5 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none mb-2">
+                          {item.total} Employees
+                          <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 rotate-45"></div>
+                       </div>
+                       <div 
+                         className="w-full max-w-[40px] sm:max-w-[60px] bg-blue-500 dark:bg-blue-600 rounded-t-lg transition-all duration-700 ease-out relative hover:brightness-110"
+                         style={{ height: `${Math.max((item.total / max) * 100, 2)}%` }} 
+                       >
+                       </div>
+                    </div>
+                    <div className="text-center w-full mt-1">
+                      <div className="text-sm font-bold text-slate-900 dark:text-white mb-0.5">{item.total}</div>
+                      <div className="text-[10px] sm:text-xs font-medium text-slate-500 dark:text-slate-400 break-words leading-tight w-full px-1">
+                        {item.name}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        };
+
+        // --- HELPERS ---
+        const getDirectImageUrl = (url) => {
+            if (!url) return "";
+            if (url.startsWith('data:image')) return url; 
+            let cleanUrl = url.trim();
+            // Removed specific Google Drive and Dropbox logic.
+            return cleanUrl;
+        };
+
+        const formatDateForInput = (dateString) => {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) return ''; 
+            return date.toISOString().split('T')[0];
+        };
+
+        // --- EDIT FORM COMPONENTS ---
+        const EditInputField = ({ label, name, type = "text", value, onChange }) => {
+            let displayValue = value || '';
+            if (type === 'date' && displayValue) {
+               const formatted = formatDateForInput(displayValue);
+               if (formatted) displayValue = formatted;
+            }
+
+            return (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</label>
+                <input 
+                  type={type} 
+                  name={name} 
+                  value={displayValue} 
+                  onChange={onChange}
+                  className="px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
+                />
+              </div>
+            );
+        };
+
+        const EditSelectField = ({ label, name, value, options, onChange }) => (
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</label>
+              <select 
+                name={name} 
+                value={value || ''} 
+                onChange={onChange}
+                className="px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
+              >
+                <option value="" disabled>Select {label}</option>
+                {options.map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </div>
+        );
+
+        const ProfileField = ({ label, value, icon: Icon, className = "" }) => (
+            <div className={`flex flex-col justify-center gap-0.5 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700 ${className}`}>
+              <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1">
+                {Icon && <Icon size={9} />} {label}
+              </span>
+              <span className="text-xs text-slate-900 dark:text-slate-100 font-semibold truncate leading-tight" title={value}>
+                {value || "-"}
+              </span>
+            </div>
+        );
+
+        // --- UNIFIED EMPLOYEE MODAL ---
+        const EmployeeModal = ({ employee, mode = 'view', onClose, onSave }) => {
+          const [formData, setFormData] = useState({ ...employee });
+          const isEdit = mode === 'edit';
+          const fileInputRef = useRef(null);
+          
+          const isActive = (isEdit ? formData.status : employee.status)?.toLowerCase().includes('active');
+
+          const handleChange = (e) => {
+            const { name, value } = e.target;
+            setFormData(prev => ({ ...prev, [name]: value }));
+          };
+
+          const handleImageUpload = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    setFormData(prev => ({ ...prev, photo: reader.result }));
+                };
+                reader.readAsDataURL(file);
+            }
+          };
+
+          const handleSubmit = (e) => {
+            e.preventDefault();
+            // Simple validation for new employee
+            if (formData.name === "New Employee" && !formData.tempo_email) {
+                console.error("Please enter a name and Tempo Email for the new employee.");
+                return;
+            }
+            onSave(formData);
+          };
+
+          // Helper: Unified field rendering
+          const UnifiedField = ({ label, name, type = "text", value, onChange, isEdit, icon: Icon, options = [] }) => {
+             if (isEdit) {
+                 if (type === 'select') {
+                     return <EditSelectField label={label} name={name} value={value} options={options} onChange={onChange} />;
+                 }
+                 return <EditInputField label={label} name={name} type={type} value={value} onChange={onChange} />;
+             } else {
+                 return <ProfileField label={label} value={value} icon={Icon} />;
+             }
+          };
+
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+              <div className="absolute inset-0" onClick={onClose}></div>
+              <div className="relative bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-5xl border border-slate-200 dark:border-slate-700 flex flex-col my-auto max-h-[90vh]">
+                
+                {/* Header */}
+                <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 rounded-t-xl">
+                   <div className="flex items-center gap-6">
+                      {isEdit ? (
+                          <div className="relative group cursor-pointer shrink-0" onClick={() => fileInputRef.current.click()}>
+                            <UserAvatar name={formData.name} photo={formData.photo} size="lg" />
+                            <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Upload size={32} className="text-white" />
+                            </div>
+                            <input type="file" ref={fileInputRef} className="hidden" onChange={handleImageUpload} accept="image/*" />
+                          </div>
+                      ) : (
+                          <UserAvatar name={formData.name} photo={formData.photo} size="lg" />
+                      )}
+                      <div>
+                          {isEdit ? (
+                              <div className="w-80">
+                                  <UnifiedField label="Full Name" name="name" value={formData.name} onChange={handleChange} isEdit={true} />
+                              </div>
+                          ) : (
+                              <h2 className="text-3xl font-bold text-slate-900 dark:text-white leading-tight mb-2">{formData.name}</h2>
+                          )}
+                          
+                          {!isEdit && (
+                              <div className="flex items-center gap-3 mt-1">
+                                <StatusBadge status={formData.status} />
+                                <span className="text-sm text-slate-500 dark:text-slate-400 font-mono bg-white dark:bg-slate-900 px-2 py-1 rounded border border-slate-200 dark:border-slate-700">
+                                  ID: {formData.id}
+                                </span>
+                              </div>
+                          )}
+                      </div>
+                   </div>
+                   
+                   <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors text-slate-400">
+                    <X size={24} />
+                  </button>
+                </div>
+                
+                <form onSubmit={handleSubmit} className="p-8 overflow-y-auto flex-1">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    
+                    {/* Column 1: Employment */}
+                    <div className="space-y-5">
+                        <h3 className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest border-b border-blue-100 dark:border-blue-900/30 pb-2 mb-3">
+                           Employment
+                        </h3>
+                        {isEdit && <UnifiedField label="Employee ID" name="id" value={formData.id} onChange={handleChange} isEdit={true} />}
+                        {isEdit && <UnifiedField label="Photo URL" name="photo" value={formData.photo} onChange={handleChange} isEdit={true} />}
+                        
+                        {isEdit && (
+                            <UnifiedField 
+                                label="Status" 
+                                name="status" 
+                                type="select"
+                                options={["Active", "Leave", "Terminated", "Resigned"]}
+                                value={formData.status} 
+                                onChange={handleChange} 
+                                isEdit={true} 
+                            />
+                        )}
+
+                        <UnifiedField 
+                          label="Title" 
+                          name="title" 
+                          value={formData.title} 
+                          onChange={handleChange} 
+                          isEdit={isEdit} 
+                          icon={Briefcase} 
+                          type={isEdit ? "select" : "text"} 
+                          options={TITLE_HIERARCHY}
+                        />
+                        <UnifiedField label="Supervisor" name="team_lead" value={formData.team_lead} onChange={handleChange} isEdit={isEdit} icon={UserCheck} />
+                        
+                        {isEdit && (
+                            <UnifiedField 
+                                label="Channel (LOB)" 
+                                name="channel" 
+                                value={formData.channel} 
+                                onChange={handleChange} 
+                                isEdit={true} 
+                                icon={Building} 
+                                type="select"
+                                options={["MX T1", "T2/Mentor", "T2/Cancellation", "T2/Tech", "Social Media", "QA", "Workforce Analyst", "QA Lead", "Unassigned"]}
+                            />
+                        )}
+                        {isEdit && <UnifiedField label="Sub-Channel" name="sub_channel" value={formData.sub_channel} onChange={handleChange} isEdit={true} />}
+                        
+                        {(!isActive || isEdit) && <UnifiedField label="Rehire Status" name="rehire_status" value={formData.rehire_status} onChange={handleChange} isEdit={isEdit} icon={Hash} />}
+                    </div>
+
+                    {/* Column 2: Timeline & Contact */}
+                    <div className="space-y-5">
+                        <h3 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest border-b border-indigo-100 dark:border-indigo-900/30 pb-2 mb-3">
+                           Timeline & Contact
+                        </h3>
+                        <div className="grid grid-cols-2 gap-4">
+                           <UnifiedField label="Joined" name="joining_date" type="date" value={formData.joining_date} onChange={handleChange} isEdit={isEdit} icon={Calendar} />
+                           {(!isActive || isEdit) ? <UnifiedField label="End Date" name="end_date" type="date" value={formData.end_date} onChange={handleChange} isEdit={isEdit} icon={Calendar} /> : <div/>}
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <UnifiedField label="Wave" name="wave" value={formData.wave} onChange={handleChange} isEdit={isEdit} icon={Activity} />
+                            <UnifiedField label="Born" name="dob" type="date" value={formData.dob} onChange={handleChange} isEdit={isEdit} icon={Calendar} />
+                        </div>
+
+                        <div className="pt-2"></div>
+                        <UnifiedField label="Tempo Email" name="tempo_email" type="email" value={formData.tempo_email} onChange={handleChange} isEdit={isEdit} icon={Mail} />
+                        <UnifiedField label="Personal Email" name="personal_email" type="email" value={formData.personal_email} onChange={handleChange} isEdit={isEdit} icon={Mail} />
+                    </div>
+
+                    {/* Column 3: Personal & Details */}
+                    <div className="space-y-5">
+                        <h3 className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-widest border-b border-purple-100 dark:border-purple-900/30 pb-2 mb-3">
+                           Personal & Info
+                        </h3>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <UnifiedField label="Mobile" name="mobile" value={formData.mobile} onChange={handleChange} isEdit={isEdit} icon={Phone} />
+                            <UnifiedField label="Phone" name="phone" value={formData.phone} onChange={handleChange} isEdit={isEdit} icon={Phone} />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <UnifiedField label="Gender" name="gender" value={formData.gender} onChange={handleChange} isEdit={isEdit} icon={User} />
+                            <UnifiedField label="Religion" name="religion" value={formData.religion} onChange={handleChange} isEdit={isEdit} icon={Heart} />
+                        </div>
+                        
+                        <UnifiedField label="Route" name="route" value={formData.route} onChange={handleChange} isEdit={isEdit} icon={Truck} />
+                        <UnifiedField label="Graduate / Undergrad" name="education" value={formData.education} onChange={handleChange} isEdit={isEdit} icon={GraduationCap} />
+                        {isEdit && <UnifiedField label="Area" name="area" value={formData.area} onChange={handleChange} isEdit={true} icon={MapPin} />}
+                    </div>
+
+                  </div>
+                </form>
+
+                <div className="p-6 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex justify-end gap-3 rounded-b-xl">
+                  <button onClick={onClose} className="px-5 py-2.5 text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors">
+                    {isEdit ? 'Cancel' : 'Close'}
+                  </button>
+                  {isEdit && (
+                    <button type="submit" onClick={handleSubmit} className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors flex items-center gap-2 shadow-md hover:shadow-lg transform active:scale-95 duration-150">
+                      <Save size={18} /> {employee.id.startsWith('NEW-') ? 'Create Employee' : 'Save Changes'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        };
+
+        // --- COMPACT CARD WIDGET ---
+        const EmployeeWidget = ({ employee, onClick, onEdit, onDelete }) => {
+          return (
+            <div 
+              onClick={onClick}
+              className="group bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-700 cursor-pointer transition-all duration-200 flex flex-col overflow-hidden relative animate-in fade-in zoom-in-95 h-full transform hover:-translate-y-1"
+            >
+              <div className={`h-1.5 w-full ${
+                employee.channel === 'MX T1' ? 'bg-indigo-500' :
+                employee.channel === 'Engineering' ? 'bg-blue-500' :
+                employee.channel === 'Sales' ? 'bg-green-500' :
+                employee.channel === 'Finance' ? 'bg-purple-500' :
+                'bg-slate-400'
+              }`} />
+
+              <div className="p-4 flex-1">
+                <div className="flex justify-between items-start mb-4">
+                  <UserAvatar name={employee.name} photo={employee.photo} size="md" />
+                  <StatusBadge status={employee.status} />
+                </div>
+
+                <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg truncate mb-1" title={employee.name}>{employee.name}</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1 mb-3 truncate font-medium">
+                  <Briefcase size={14} className="text-slate-400 dark:text-slate-500" /> {employee.title || employee.position}
+                </p>
+                
+                <div className="mt-2 mb-3 text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-700/50 p-2 rounded-lg border border-slate-100 dark:border-slate-600 flex items-center gap-2 w-full">
+                   <UserCheck size={14} className="text-slate-400 dark:text-slate-500 flex-shrink-0"/> 
+                   <div className="flex flex-col min-w-0">
+                       <span className="text-[10px] uppercase font-bold text-slate-400">Supervisor</span>
+                       <span className="truncate font-semibold text-slate-700 dark:text-slate-200">{employee.team_lead}</span>
+                   </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-700 grid grid-cols-2 gap-2 text-xs text-slate-500 dark:text-slate-400">
+                   <div className="flex items-center gap-1.5 truncate" title={employee.sub_channel ? `${employee.channel} - ${employee.sub_channel}` : employee.channel}>
+                      {employee.sub_channel === 'Phone' ? <Phone size={14}/> : 
+                       employee.sub_channel === 'Email' ? <Mail size={14}/> : 
+                       employee.sub_channel?.includes('Chat') ? <MessageCircle size={14}/> :
+                       <Building size={14} />}
+                      <span className="truncate font-medium">
+                        {employee.channel} {employee.sub_channel && <span className="text-slate-400">• {employee.sub_channel}</span>}
+                      </span>
+                   </div>
+                   <div className="flex items-center gap-1.5 truncate">
+                      <MapPin size={14} />
+                      <span className="truncate font-medium">{employee.area}</span>
+                   </div>
+                </div>
+              </div>
+              
+              {/* Action Bar */}
+              <div className="bg-slate-50 dark:bg-slate-900/30 p-3 flex justify-between items-center border-t border-slate-100 dark:border-slate-700">
+                <div className="flex gap-1">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); onEdit(employee); }}
+                      className="p-2 hover:bg-white dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg transition-colors text-slate-400" 
+                      title="Edit"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); onDelete(employee.id); }}
+                      className="p-2 hover:bg-white dark:hover:bg-slate-700 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-colors text-slate-400" 
+                      title="Delete"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                </div>
+                <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1 group-hover:underline">
+                  Full Profile <ChevronRight size={14} />
+                </div>
+              </div>
+            </div>
+          );
+        };
+
+        const EmployeeRow = ({ employee, onClick, onEdit, onDelete }) => (
+          <tr 
+            onClick={onClick}
+            className="hover:bg-blue-50 dark:hover:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700 last:border-0 transition-colors cursor-pointer group"
+          >
+            <td className="px-6 py-4">
+              <div className="flex items-center gap-3">
+                <UserAvatar name={employee.name} photo={employee.photo} size="sm" />
+                <div>
+                  <div className="font-medium text-slate-900 dark:text-slate-100">{employee.name}</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">ID: {employee.id}</div>
+                </div>
+              </div>
+            </td>
+            <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                <div className="font-medium text-slate-700 dark:text-slate-200">{employee.title}</div>
+                <div className="text-xs text-slate-400">{employee.position}</div>
+            </td>
+            <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
+                <div className="flex items-center gap-2">
+                    <UserCheck size={14} className="text-slate-400 dark:text-slate-500"/>
+                    {employee.team_lead}
+                </div>
+            </td>
+            <td className="px-6 py-4">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-600">
+                {employee.channel} {employee.sub_channel && `• ${employee.sub_channel}`}
+              </span>
+            </td>
+            <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
+                {employee.joining_date}
+            </td>
+            <td className="px-6 py-4 flex justify-end gap-2 items-center">
+                <StatusBadge status={employee.status} />
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onEdit(employee); }}
+                  className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-slate-400 hover:text-blue-500"
+                >
+                    <Edit2 size={14} />
+                </button>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onDelete(employee.id); }}
+                  className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-slate-400 hover:text-red-500"
+                >
+                    <Trash2 size={14} />
+                </button>
+            </td>
+          </tr>
+        );
+
+        function HeadcountDashboard() {
+          const [data, setData] = useState(INITIAL_DATA);
+          const [viewMode, setViewMode] = useState('map'); 
+          const [searchTerm, setSearchTerm] = useState('');
+          const [selectedTitle, setSelectedTitle] = useState('All'); 
+          const [darkMode, setDarkMode] = useState(false);
+          const [showActiveOnly, setShowActiveOnly] = useState(true);
+          const [loading, setLoading] = useState(false);
+          
+          // Unified Modal State
+          const [modalEmployee, setModalEmployee] = useState(null); 
+          const [modalMode, setModalMode] = useState('view'); // 'view' or 'edit'
+
+          const [expandedStats, setExpandedStats] = useState({}); 
+          const fileInputRef = useRef(null);
+
+          // --- DARK MODE TOGGLE EFFECT (FIXED & CORRECT) ---
+          // This ensures the class is set right away, resolving potential visual lag issues.
+          useEffect(() => {
+            // 1. Initial check and setup
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const savedTheme = localStorage.getItem('theme');
+            let initialDark = false;
+            
+            if (savedTheme === 'dark') {
+                initialDark = true;
+            } else if (savedTheme === null && prefersDark) {
+                initialDark = true;
+            }
+            
+            setDarkMode(initialDark);
+            
+            // Apply class directly to ensure zero flash of incorrect theme
+            if (initialDark) {
+                 document.documentElement.classList.add('dark');
+                 document.body.classList.add('dark:bg-slate-900');
+            } else {
+                 document.documentElement.classList.remove('dark');
+                 document.body.classList.remove('dark:bg-slate-900');
+            }
+          }, []);
+
+          useEffect(() => {
+            // 2. Applies/removes 'dark' class and sets localStorage on state change
+            if (darkMode) {
+              document.documentElement.classList.add('dark');
+              document.body.classList.add('dark:bg-slate-900');
+              localStorage.setItem('theme', 'dark');
+            } else {
+              document.documentElement.classList.remove('dark');
+              document.body.classList.remove('dark:bg-slate-900');
+              localStorage.setItem('theme', 'light');
+            }
+          }, [darkMode]);
+
+
+          // --- FIREBASE ONLY DATA LOADING ---
+          const [firestoreEmployees, setFirestoreEmployees] = useState([]);
+          
+          useEffect(() => {
+            setLoading(true);
+            
+            // 1. Listen to Firebase (Sole Data Source)
+            if (db) {
+                // Fetch only non-deleted employees
+                const employeesCollection = collection(db, "employees");
+                
+                // Using an empty query and filtering out 'deleted' items locally 
+                // because Firestore doesn't allow '!= false' queries easily without index management.
+                const unsubscribe = onSnapshot(employeesCollection, (snapshot) => {
+                    const fbData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+                                              .filter(emp => !emp.deleted); // Filter out soft-deleted items
+                    setFirestoreEmployees(fbData);
+                    setData(fbData); // Set the main data source directly from Firestore
+                    setLoading(false);
+                }, (error) => {
+                    console.error("Firebase Snapshot Error:", error);
+                    setLoading(false);
+                });
+                return () => unsubscribe();
+            } else {
+                // If Firebase initialization failed, stop loading.
+                setLoading(false);
+                console.warn("Firebase is not initialized. Cannot load data.");
+            }
+          }, []);
+
+
+          // --- HANDLERS ---
+          
+          const handleImportCSV = async (csvText) => {
+              if (!db) {
+                  window.alert("Database connection failed. Cannot import data.");
+                  return;
+              }
+              
+              setLoading(true);
+              
+              try {
+                  const employeeData = parseCSV(csvText);
+                  
+                  if (employeeData.length === 0) {
+                      window.alert("No valid employee data found in the CSV. Please ensure the CSV format is correct (using tabs, including headers, and 25 columns per row).");
+                      setLoading(false);
+                      return;
+                  }
+
+                  const batch = writeBatch(db);
+                  const employeesCollection = collection(db, "employees");
+                  
+                  employeeData.forEach((emp) => {
+                      const docRef = doc(employeesCollection, emp.id);
+                      batch.set(docRef, emp, { merge: true });
+                  });
+                  
+                  await batch.commit();
+                  window.alert(`Successfully imported ${employeeData.length} employees into Firebase.`);
+              } catch (error) {
+                  console.error("Error during CSV import to Firebase:", error);
+                  window.alert("Failed to import data. Check the console for details.");
+              } finally {
+                  setLoading(false);
+              }
+          };
+
+          // Handler for one-click import of the embedded file
+          const handleAutoImportCSV = async () => {
+              if (!UPLOADED_DATA_CONTENT) {
+                  window.alert("The embedded data could not be found. Please use the Manual Import (Upload icon) instead.");
+                  return;
+              }
+              
+              const shouldProceed = window.confirm("This will import all embedded records into Firebase, potentially overwriting existing records. Continue?");
+              
+              if (shouldProceed) {
+                  await handleImportCSV(UPLOADED_DATA_CONTENT);
+              }
+          };
+
+          // Handler for the Manual Paste Button
+          const handleManualPaste = () => {
+              const defaultContent = "Paste your CSV data here...";
+              const csvText = window.prompt("Paste your CSV data here (must include header row, copied from Excel or any other source):", defaultContent);
+              
+              if (!csvText || csvText === defaultContent) {
+                  console.log("Manual CSV import cancelled or placeholder text used.");
+                  if (csvText !== defaultContent) {
+                       window.alert("Import cancelled or no data pasted.");
+                  }
+                  return;
+              }
+              
+              handleImportCSV(csvText);
+          };
+
+
+          const handleDelete = async (id) => {
+            // Using window.confirm as it is a standard UI element
+            const shouldDelete = window.confirm("Are you sure you want to delete this employee entry? This cannot be undone."); 
+            if (shouldDelete) {
+                if (db) {
+                    // Soft delete in Firebase
+                    await setDoc(doc(db, "employees", id), { deleted: true, status: "Terminated" }, { merge: true });
+                } else {
+                    // Fallback (shouldn't be needed with this Firebase-first design)
+                    setData(prev => prev.filter(emp => emp.id !== id));
+                }
+            }
+          };
+
+          const handleUpdate = async (updatedEmployee) => {
+            if (db) {
+                // Determine if it's a new entry that needs a real ID
+                let docId = updatedEmployee.id;
+                if (docId.startsWith('NEW-')) {
+                    // Generate a cleaner, more permanent ID for Firestore
+                    docId = updatedEmployee.name.replace(/\s/g, '_').toLowerCase() + '-' + Date.now().toString().slice(-4);
+                }
+
+                // Save to Firebase (merging with existing data)
+                // We ensure 'deleted' status is removed if they edited a deleted record.
+                const { id, deleted, ...cleanData } = JSON.parse(JSON.stringify(updatedEmployee));
+                await setDoc(doc(db, "employees", docId), cleanData, { merge: true });
+            } else {
+                // Fallback for no Firebase (won't happen if Firebase initializes)
+                setData(prev => prev.map(emp => emp.id === updatedEmployee.id ? updatedEmployee : emp));
+            }
+            setModalEmployee(null); 
+          };
+          
+          const handleNewEmployee = () => {
+              if (!db) {
+                  console.error("Cannot add new employee. Firebase is not connected.");
+                  return;
+              }
+              const newId = `NEW-${Date.now()}`;
+              const blankEmployee = {
+                  name: "New Employee",
+                  id: newId,
+                  status: "Active",
+                  title: TITLE_HIERARCHY[TITLE_HIERARCHY.length - 1] || "MX T1", // Default to lowest rank
+                  channel: "MX T1",
+                  team_lead: "",
+                  joining_date: new Date().toISOString().split('T')[0],
+                  photo: ""
+              };
+              setModalEmployee(blankEmployee);
+              setModalMode('edit');
+          };
+
+
+          const openViewModal = (employee) => { setModalEmployee(employee); setModalMode('view'); };
+          const openEditModal = (employee) => { setModalEmployee(employee); setModalMode('edit'); };
+          const closeModal = () => { setModalEmployee(null); };
+
+          const getRoleRank = (title) => {
+            if (!title) return 999;
+            const t = title.toLowerCase();
+            const index = TITLE_HIERARCHY.findIndex(rankTitle => t.includes(rankTitle.toLowerCase()));
+            return index !== -1 ? index : 999;
+          };
+
+          const filterTitles = useMemo(() => {
+            const activeData = data.filter(e => {
+                // Robust status check
+                const statusStr = e.status || "";
+                return statusStr.toLowerCase().replace(/[^a-z]/g, '') === 'active';
+            });
+            const titles = [...new Set(activeData.map(item => item.title))];
+            const cleanTitles = titles.filter(t => t && t.trim() !== '');
+            return ['All', ...cleanTitles.sort((a, b) => getRoleRank(a) - getRoleRank(b))];
+          }, [data]);
+
+          const filteredData = useMemo(() => {
+            const result = data.filter(employee => {
+              const statusStr = employee.status || "";
+              const isActive = statusStr.toLowerCase().replace(/[^a-z]/g, '') === 'active';
+              
+              if (showActiveOnly && !isActive) { return false; }
+              const searchLower = searchTerm.toLowerCase();
+              const matchesSearch = 
+                (employee.name?.toLowerCase() || '').includes(searchLower) || 
+                (employee.title?.toLowerCase() || '').includes(searchLower) ||
+                (employee.id?.toLowerCase() || '').includes(searchLower) ||
+                (employee.team_lead?.toLowerCase() || '').includes(searchLower);
+              const matchesTitle = selectedTitle === 'All' || employee.title === selectedTitle;
+              return matchesSearch && matchesTitle;
+            });
+            return result.sort((a, b) => getRoleRank(a.title) - getRoleRank(b.title));
+          }, [data, searchTerm, selectedTitle, showActiveOnly]);
+
+          const groupedData = useMemo(() => {
+            return filteredData.reduce((acc, employee) => {
+              const key = employee.channel || 'Unassigned';
+              if (!acc[key]) acc[key] = [];
+              acc[key].push(employee);
+              return acc;
+            }, {});
+          }, [filteredData]);
+
+          const lobStats = useMemo(() => {
+            const stats = filteredData.reduce((acc, curr) => {
+              const channel = curr.channel || 'Unassigned';
+              const subChannel = curr.sub_channel;
+              if (!acc[channel]) acc[channel] = { total: 0, subChannels: {}, employees: [] }; 
+              acc[channel].total += 1;
+              acc[channel].employees.push(curr); 
+              if (subChannel) acc[channel].subChannels[subChannel] = (acc[channel].subChannels[subChannel] || 0) + 1;
+              return acc;
+            }, {});
+            return Object.entries(stats).sort((a, b) => b[1].total - a[1].total).map(([name, data]) => ({ name, ...data }));
+          }, [filteredData]);
+
+          const stats = {
+            total: data.length,
+            visible: filteredData.length,
+            // Robust active count
+            active: data.filter(e => {
+                const statusStr = e.status || "";
+                return statusStr.toLowerCase().replace(/[^a-z]/g, '') === 'active';
+            }).length,
+            lobs: Object.keys(groupedData).length
+          };
+
+          const handleExport = () => {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(filteredData, null, 2));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "tempo_export.json");
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            document.body.removeChild(downloadAnchorNode); // Use removeChild for clipboard compatibility
+          };
+
+          const handleSheetLink = () => {
+            // This function is kept for the UI element but serves no purpose now.
+          };
+
+          return (
+            <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200">
+                {modalEmployee && (
+                  <EmployeeModal 
+                    employee={modalEmployee} 
+                    mode={modalMode}
+                    onClose={closeModal} 
+                    onSave={handleUpdate}
+                  />
+                )}
+                <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 shadow-sm">
+                  <div className="max-w-[96%] mx-auto px-4 h-16 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-blue-600 p-2 rounded-lg text-white"><Users size={20} /></div>
+                      {/* --- MODIFIED TITLE HERE --- */}
+                      <h1 className="text-xl font-bold text-slate-800 dark:text-white">Tempo Master Dashboard</h1>
+                      {loading && <div className="loader ml-3"></div>}
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <input type="text" placeholder="Search..." className="pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-sm border-transparent focus:bg-white dark:focus:bg-slate-600 border outline-none text-slate-800 dark:text-slate-100 w-full sm:w-64" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                        </div>
+                        
+                        {/* NEW EMPLOYEE BUTTON */}
+                        <button 
+                            onClick={handleNewEmployee}
+                            className="hidden sm:flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-sm shadow-md active:scale-95 duration-150"
+                            title="Add New Employee"
+                        >
+                            <PlusCircle size={18} /> <span className="hidden lg:inline">New Employee</span>
+                        </button>
+                        <button 
+                            onClick={handleNewEmployee}
+                            className="flex sm:hidden p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-md"
+                            title="Add New Employee"
+                        >
+                            <PlusCircle size={20} />
+                        </button>
+
+
+                        <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-lg">
+                            <button onClick={() => setViewMode('map')} className={`p-2 rounded ${viewMode === 'map' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}><MapIcon size={18}/></button>
+                            <button onClick={() => setViewMode('list')} className={`p-2 rounded ${viewMode === 'list' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}><List size={18}/></button>
+                            <button onClick={() => setViewMode('stats')} className={`p-2 rounded ${viewMode === 'stats' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}><BarChart3 size={18}/></button>
+                        </div>
+                        <button 
+                          onClick={() => setShowActiveOnly(!showActiveOnly)} 
+                          className={`flex gap-2 px-3 py-2 rounded-lg text-sm border ${showActiveOnly ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700' : 'bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600'}`}
+                          title={showActiveOnly ? "Show All Employees" : "Show Active Only"}
+                        >
+                          {showActiveOnly ? <Eye size={18}/> : <EyeOff size={18}/>} <span className="hidden sm:inline">Active Only</span>
+                        </button>
+                        
+                        {/* ONE-CLICK IMPORT BUTTON (Uses embedded file content) */}
+                         <button 
+                            onClick={handleAutoImportCSV} 
+                            className="flex items-center gap-2 px-3 py-2 bg-purple-500 hover:bg-purple-600 text-white font-bold rounded-lg transition-colors text-sm shadow-md active:scale-95 duration-150"
+                            title="Import embedded data into Firebase"
+                        >
+                            <Database size={18} /> <span className="hidden lg:inline">Import Embedded Data</span>
+                        </button>
+                        
+                        {/* MANUAL IMPORT DATA BUTTON (Paste CSV) */}
+                        <button onClick={handleManualPaste} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors" title="Manual Import (Paste CSV)">
+                            <Upload size={18}/>
+                        </button>
+                        
+                        <button onClick={handleExport} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors" title="Export to JSON"><Download size={18}/></button>
+                        
+                        {/* DARK MODE TOGGLE */}
+                        <button onClick={() => setDarkMode(!darkMode)} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors" title="Toggle Dark Mode">
+                          {darkMode ? <Sun size={20} className="text-amber-400"/> : <Moon size={20}/>}
+                        </button>
+                    </div>
+                  </div>
+                </header>
+                <main className="max-w-[96%] mx-auto px-4 py-8">
+                   <div className="mb-6 flex gap-4 items-center justify-between flex-wrap">
+                       <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-3 min-w-[150px]">
+                           <div className="bg-green-100 dark:bg-green-900/30 p-2 rounded text-green-600"><Eye size={20}/></div>
+                           <div>
+                               <p className="text-xs text-slate-500 dark:text-slate-400">Total Employees</p>
+                               <p className="text-xl font-bold dark:text-white">{stats.total}</p>
+                           </div>
+                       </div>
+                       <div className="flex flex-wrap gap-2 items-center overflow-x-auto pb-2 scrollbar-thin">
+                           <Filter size={18} className="text-slate-400 mr-2 flex-shrink-0"/>
+                           {filterTitles.map(t => (
+                               <button key={t} onClick={() => setSelectedTitle(t)} className={`px-3 py-1 rounded-full text-xs border flex-shrink-0 transition-all ${selectedTitle === t ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>{t}</button>
+                           ))}
+                       </div>
+                   </div>
+                   
+                   {/* CONTENT VIEW */}
+                   {filteredData.length === 0 && !loading && (
+                      <div className="text-center p-12 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                          <Search size={48} className="text-slate-300 dark:text-slate-600 mx-auto mb-4"/>
+                          <p className="text-xl font-bold text-slate-600 dark:text-slate-300">No Employees Found</p>
+                          <p className="text-slate-500 dark:text-slate-400">Click 'New Employee' to get started or 'Import Embedded Data' to load from your file.</p>
+                      </div>
+                   )}
+                   
+                   {viewMode === 'stats' && (
+                       <>
+                           <LobChart data={lobStats} />
+                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                               {lobStats.map(lob => (
+                                   <div key={lob.name} className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                                       <div className="flex justify-between mb-4">
+                                           <div><h3 className="font-bold dark:text-white">{lob.name}</h3><p className="text-sm text-slate-500">{lob.total} employees</p></div>
+                                           <Users className="text-blue-500"/>
+                                       </div>
+                                       <div className="w-full bg-slate-100 rounded-full h-2 mb-4"><div className="bg-blue-600 h-2 rounded-full" style={{width: `${(lob.total/stats.visible)*100}%`}}></div></div>
+                                       {/* Toggle to view employees for that LOB */}
+                                       <button onClick={() => setExpandedStats(prev => ({...prev, [lob.name]: !prev[lob.name]}))} className="w-full text-xs flex justify-between items-center py-2 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                                            <span>{expandedStats[lob.name] ? 'Hide Agents' : 'Show Agents'}</span>
+                                            <ChevronDown size={14} className={`transition-transform ${expandedStats[lob.name] ? 'transform rotate-180' : ''}`}/>
+                                       </button>
+                                       
+                                       {expandedStats[lob.name] && (
+                                           <div className="mt-2 space-y-1 max-h-60 overflow-y-auto text-xs scrollbar-thin">
+                                               {lob.employees.map(e => (
+                                                   <div key={e.id} onClick={() => openViewModal(e)} className="p-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded cursor-pointer flex gap-2 items-center transition-colors">
+                                                       <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-[10px] text-blue-600 font-bold flex-shrink-0">{e.name.charAt(0)}</div>
+                                                       <div className="truncate flex-1"><p className="font-medium dark:text-slate-200 truncate">{e.name}</p><p className="text-slate-400 truncate">{e.title}</p></div>
+                                                   </div>
+                                               ))}
+                                           </div>
+                                       )}
+                                   </div>
+                               ))}
+                           </div>
+                       </>
+                   )}
+                   {viewMode === 'map' && (
+                       <div className="space-y-8">
+                           {Object.entries(groupedData).map(([lob, employees]) => (
+                               <div key={lob}>
+                                   <div className="flex items-center gap-4 mb-4">
+                                       <h2 className="text-lg font-bold dark:text-white">{lob}</h2>
+                                       <span className="text-xs bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-full font-semibold">{employees.length}</span>
+                                       <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
+                                   </div>
+                                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                                       {employees.map(e => <EmployeeWidget key={e.id} employee={e} onClick={() => openViewModal(e)} onEdit={openEditModal} onDelete={handleDelete}/>)}
+                                   </div>
+                               </div>
+                           ))}
+                       </div>
+                   )}
+                   {viewMode === 'list' && (
+                       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm overflow-x-auto">
+                           <table className="min-w-full text-left text-sm text-slate-600 dark:text-slate-300">
+                               <thead className="bg-slate-50 dark:bg-slate-900 font-semibold text-slate-500 dark:text-slate-400 sticky top-0">
+                                  <tr>
+                                    <th className="px-6 py-3">Employee</th>
+                                    <th className="px-6 py-3">Title</th>
+                                    <th className="px-6 py-3">Supervisor</th>
+                                    <th className="px-6 py-3">Channel</th>
+                                    <th className="px-6 py-3">Start Date</th>
+                                    <th className="px-6 py-3 text-right">Status & Actions</th>
+                                  </tr>
+                               </thead>
+                               <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                   {filteredData.map(e => <EmployeeRow key={e.id} employee={e} onClick={() => openViewModal(e)} onEdit={openEditModal} onDelete={handleDelete}/>)}
+                               </tbody>
+                           </table>
+                       </div>
+                   )}
+                </main>
+            </div>
+          );
+        }
+
+        // ---------------------------------------------------------
+        // REACT MOUNT
+        // ---------------------------------------------------------
+        const container = document.getElementById('root');
+        const root = createRoot(container);
+        root.render(<HeadcountDashboard />);
+    </script>
+</body>
+</html>
