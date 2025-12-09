@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tempo Master Tool</title>
+    
+    <!-- Configure Tailwind for Manual Dark Mode (Must be before Tailwind script) -->
+    <script>
+        tailwind = {
+            config: {
+                darkMode: 'class',
+            }
+        }
+    </script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Babel for JSX transformation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* Custom scrollbar for lists */
+        .scrollbar-thin::-webkit-scrollbar {
+            width: 6px;
+        }
+        .scrollbar-thin::-webkit-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 20px;
+        }
+        .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+            background-color: #475569;
+        }
+        
+        /* Loading Spinner */
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #3b82f6;
+            width: 20px;
+            height: 20px;
+            -webkit-animation: spin 1s linear infinite; /* Safari */
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<!-- Re-applied base background class: bg-slate-50 is the default light mode background. dark:bg-slate-900 is controlled by JS on the HTML root. -->
+<body class="bg-slate-50 transition-colors duration-200">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useMemo, useRef, useEffect } from 'https://esm.sh/react@18.2.0';
+        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+        
+        // Import Firebase (Modular SDK)
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+        import { 
+            getFirestore, 
+            collection, 
+            doc, 
+            setDoc, 
+            onSnapshot,
+            writeBatch
+        } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+
+        import { 
+          Users, 
+          Search, 
+          Map as MapIcon, 
+          List, 
+          Filter, 
+          Mail, 
+          Phone, 
+          Briefcase, 
+          MapPin, 
+          Activity,
+          UserCircle,
+          Download,
+          Upload,
+          Building,
+          UserCheck,
+          Moon,
+          Sun,
+          Eye,
+          EyeOff,
+          X,
+          Calendar,
+          GraduationCap,
+          Truck,
+          MessageCircle,
+          Hash,
+          Heart,
+          User,
+          ChevronRight,
+          BarChart3,
+          ChevronDown,
+          Edit2,
+          Trash2,
+          Save,
+          PlusCircle,
+          Database
+        } from 'https://esm.sh/lucide-react@0.292.0';
+
+        // ---------------------------------------------------------
+        // FILE CONTENT ACCESS (MANDATORY USE)
+        // Global utility to access uploaded file content by ID
+        const fileContentFetcher = (contentId) => {
+            if (typeof __file_content_fetcher !== 'undefined') {
+                return __file_content_fetcher(contentId);
+            }
+            console.error('__file_content_fetcher is not defined. Cannot access uploaded files.');
+            return null;
+        };
+        // ---------------------------------------------------------
+
+
+        // ---------------------------------------------------------
+        // FIREBASE CONFIGURATION
+        // ---------------------------------------------------------
+        const FIREBASE_CONFIG = {
+            apiKey: "AIzaSyAJfMGnjV6xnN1ObOJjK7blBK0fCR0NZZk",
+            authDomain: "tempomaster1-18ac4.firebaseapp.com",
+            projectId: "tempomaster1-18ac4",
+            storageBucket: "tempomaster1-18ac4.firebasestorage.app",
+            messagingSenderId: "436233309908",
+            appId: "1:436233309908:web:48ece8321ceaec29593541",
+            measurementId: "G-ZEWW47WNHY"
+        };
+
+        // Initialize Firebase
+        let db = null;
+        try {
+            const app = initializeApp(FIREBASE_CONFIG);
+            db = getFirestore(app);
+            console.log("Firebase initialized successfully");
+        } catch (e) {
+            console.error("Firebase Init Error:", e);
+        }
+
+        // --- CONFIGURATION ---
+        // EMBEDDED DATA CONTENT (USING TAB SEPARATION)
+        // This is the data provided by the user, stored directly in the code for reliable seeding.
+        const UPLOADED_DATA_CONTENT = `Name	ID	HR ID	Team Lead	QA [Assigned]	Position	Channel	Title	Wave	Date of Birth	Joining Date	Status	Personal Email	Tempo Email	Phone Number	Route	Religion	Gender	Graduate \\ Undergraduate	Area	End Date	Rehire Status	Reason	Headset SN	Nationality
+Salma Ramadan	253	2578	Cynthia Hernandez	N/A	HR Manager	HR Manager	HR Manager	W2	28-Sep-95	5-Jul-21	Active	salmaragab444@gmail.com	salmaramadan@tempo.fit	1093491999	N/A	Muslim	Female	N/A	Madint Nasr			H-FX016861	Egyptian
+Khaled El Sabban	234	2551	Nancy Elsharony	N/A	Operation Manager	Operation Manager	Operation Manager	W2	15-Jul-83	23-Jun-21	Active	sabbansabban@gmail.com	khaledsabban@tempo.fit	1206034066	October-Zayed	Muslim	Male	Graduated	Haday2 al haram			H-FX016897	Egyptian
+Fatma Mohammed	705	705	Heba El Sobky	N/A	QA	QA	Quality Assurance associate	W8	14-Aug-02	21-Nov-22	Active	fatmamohamedxxx@gmail.com	fatma.mohammad@tempo.fit	1113276803	Mokattam	Musilm	Female	Undergraduated	Mokattam			Egyptian
+Hagar Alaa	816	0	Heba El Sobky	N/A	QA	QA	Quality Assurance associate	W15	8-Aug-01	29-Apr-24	Active	hagaralaa816@gmail.com	hagar.alaa@tempo.fit	1120668864	faisal	Muslim	Female	Graduated	Dar El Salam			Egyptian
+Heba El Sobky	194	2544	Nancy Elsharony	N/A	QA Lead	QA Lead	Quality Lead	W2	11-Dec-97	21-Jun-21	Active	hebasobky01@gmail.com	hebasobky@tempo.fit	1032808375	Salam/Masr El Gedida	Muslim	Female	Graduated	Salam City			H-FX016864	Egyptian
+Nancy Elsharony	164	#N/A	Anna Kacius	N/A	Site Director	Site Director	Site Director	W0	2-Mar-90	25-Jan-21	Active	nancy.sharouny@gmail.com	nancy@tempo.fit	1066650469	N/A	Muslim	Female	Graduated	Zayed		Not Received	Egyptian
+Ariath Piol	531	2668	Mohamed Mounir	N/A	Social	Social	Social	W7	15-Sep-02	25-Jul-22	Active	cavalli.quan012@gmail.com	ariath.piol@tempo.fit	"1021590628(app)\n1141796433"	Salam/Masr EL Gedida	Christian	Male	Undergraduated	#N/A			H-FW022017	Forigner
+Job James	530	2667	Mohamed Mounir	N/A	Social	Social	Social	W7	1-Jan-03	25-Jul-22	Active	jobjam046@gmail.com	job.james@tempo.fit	1129256701	N/A	Christian	Male	N/A	#N/A			H-FW021992	Forigner
+Lina Hesham	224	2550	Mohamed Mounir	N/A	Social	Social	Social	W2	29-Aug-94	3-Jun-24	Active	lina.hesham33@gmail.com	linahesham@tempo.fit	1094663733	N/A	Muslim	Female	Graduated	mokkatam			Egyptian
+Mohab Magdy	174	2520	Ahmed El Sawy	Bassam Tarek	T1 associate	Chat	MX Associate-L1	W1	30-Nov-89	5-Apr-21	Active	Mohabmagdy54@gmail.com	mohab.magdy@tempo.fit	1116620545	Faisal	Muslim	Male	Graduated	Faisal			H-FX016874	Egyptian
+Marwa Ahmed	212	2546	Ahmed El Sawy	Fatma Mohamed	T1 associate	Email	MX Associate-L1	W2	3-Oct-99	21-Jun-21	Active	marwaahmed99310@gmail.com	marwa.ahmed@tempo.fit	1090443255	Salam/Masr El Gedida	Muslim	Female	Graduated	ain shams			H-FX016900	Egyptian
+Ramadan Philip	519	2663	Ahmed El Sawy	Fatma Mohamed	T1 associate	Email	MX Associate-L1	W7	9-Jan-98	25-Jul-22	Active	ramzphil07@gmail.com	ramadan.philip@tempo.fit	1155466807	Faisal	Christian	Male	Undergraduated	#N/A			H-FW021903	Forigner
+Aida Clement	755	755	Ahmed El Sawy	Bassam Tarek	T1 associate	Chat	MX Associate-L1	W10	1-Jan-97	6-Feb-23	Active	Aida.Clement1234@gmail.com	aida.clement@tempo.fit	1148109942	Mokattam	Christian	Female	N/A	Maadi			H-FW022008	Forigner
+Hassan Khallaf	476	2598	Ahmed El Sawy	Bassam Tarek	T1 associate	Chat	MX Associate-L1	W4	9-Oct-90	7-Mar-22	Active	hekhallaf@admincraft.net	hassan@tempo.fit	1552222656	Madinat Nasr	Muslim	Male	Graduated	New Cairo			H-Fx016912	Egyptian
+Nada Ashraf	523	2656	Ahmed El Sawy	Fatma Mohamed	T1 associate	Phone	MX Associate-L1	W7	9-Sep-94	25-Jul-22	Active	ashraf.nada68@yahoo.com	nada.ashraf@tempo.fit	1021890629	Faisal	Muslim	Female	Graduated	#N/A			H-FW021993	Egyptian
+Radwa Ahmed	542	2672	Ahmed El Sawy	Bassam Tarek	T1 associate	Phone	MX Associate-L1	W7	19-Jul-99	25-Jul-22	Active	radwalashin1@gmail.com	radwa.ahmed@tempo.fit	1159774799	Helwan	Muslim	Female	Graduated	#N/A			Egyptian
+Ruben Joseph	846	846	Ahmed El Sawy	Fatma Mohamed	T1 associate	Phone	MX Associate-L1	W17		20-Jan-25	Active	robinjoseph019@gmail.com	ruben.joseph@tempo.fit	1116472799	Maadi	Christian	Male		Maadi				-	Forigner
+Esraa Tarek Eroq	791	2741	Ahmed El Sawy	Fatma Mohamed	T1 associate	Chat	MX Associate-L1	W11	30-Oct-99	13-Mar-23	Active	esraaeroq@gmail.com	esraa.tarek@tempo.fit	2.01201E+11	Masr el gedida	Muslim	Female	Graduated	Masr el gedida			Egyptian
+Ahmed Abdelghany	832	0	Ahmed El Sawy	Bassam Tarek	T1 associate	Chat	MX Associate-L1	W16	5-Sep-99	5-Aug-24	Active	ahmedabdelghanyim@gmail.com	ahmed.abdelghany@tempo.fit	1155442918	Faisal	Muslim	Male	Graduated	Faisal			Egyptian
+Mohamed Kheer	848	848	Ahmed Hamed	Bassam Tarek	T2/Cancellation	T2/Cancellation	T2/Cancellation	W17		20-Jan-25	Active	mohamedkhier10@gmail.com	mohamed.kheer@tempo.fit	2.49116E+11	Salam/Masr El Gedida	Muslim	Male		Salam/Masr El Gedida			-	Egyptian
+Nour Ayman	849	849	Ahmed El Sawy	Fatma Mohamed	T1 associate	Chat	MX Associate-L1	W17	22-Aug-04	20-Jan-25	Active	Naymanzakyy@gmail.com	nour.ayman@tempo.fit	1027722889	Shoubra	Muslim	Female	Undergraduated	Shoubra			-	Egyptian
+Ashraf Essam	850	850	Ahmed El Sawy	Bassam Tarek	T1 associate	Chat	MX Associate-L1	W17		20-Jan-25	Active	ashrafabuelmagd2@gmail.com	ashraf.essam@tempo.fit	0 11 01974078	Salam/Masr El Gedida	Muslim	Male		Salam/Masr El Gedida			-	Egyptian
+Rima Khaled Hassan Zaki	805	0	Ahmed Hamed	Bassam Tarek	T2/Cancellation	T2/Cancellation	T2/Cancellation	W13	17-Mar-03	13-Nov-23	Active	rimazakizikwa@gmail.com	"rima.khaled@tempo.fit	"	2.0106E+11	Tagamu3	Muslim	Female	Undergraduated	Shrouk			H-F2001616	Egyptian
+Hala Ayman	851	0	Ahmed El Sawy	Hagar Alaa	T1 associate	Chat	MX Associate-L1	W18	21-Feb-06	14-Jul-25	Active	haymanzaky21@gmail.com 	hala.ayman@tempo.fit	1027722887	Shoubra	Muslim	Female	Undergraduated	Dokki			Egyptian
+Rania Mohamed	857	0	Ahmed El Sawy	Hagar Alaa	T1 associate	Chat	MX Associate-L1	W18	28-Jun-95	14-Jul-25	Active	raniamabdo24@gmail.com	rania.mohamed@tempo.fit	1068303073	Faisal	Muslim	Female	Graduated	Maadi			Egyptian
+Salma Ahmed	860	0	Ahmed El Sawy	Hagar Alaa	T1 associate	Chat	MX Associate-L1	W18	21-Jun-01	14-Jul-25	Active	salma.ahmedd216@gmail.com	salma.ahmed@tempo.fit	1002451238	Maadi	Muslim	Female	Graduated	Maadi			Egyptian
+Marwan Hassan	852	0	Ahmed El Sawy	Hagar Alaa	T1 associate	Phone	MX Associate-L1	W18	8-Sep-03	14-Jul-25	Active	httpsmarwan@gmail.com	marwan.hassan@tempo.fit	1032715271	October-Zayed	Muslim	Male	Undergraduated	Haday2 al haram			Egyptian
+Osama M. Adam	853	0	Ahmed El Sawy	Hagar Alaa	T1 associate	Phone	MX Associate-L1	W18	14-Nov-81	14-Jul-25	Active	osama.adam.m@gmail.com	osama.adam@tempo.fit	1003263248	Madinat Nasr	Muslim	Male	Graduated	Zahra2 L Maadi			Egyptian
+Ahmed Ezz ElDin	854	0	Ahmed El Sawy	Hagar Alaa	T1 associate	Phone	MX Associate-L1	W18	14-Apr-91	14-Jul-25	Active	eyebag420@gmail.com	ahmed.ezzeldin@tempo.fit	1068581200	Shoubra	Muslim	Male	Graduated	Shoubra			Egyptian
+Marwan Zakaria	859	0	Ahmed El Sawy	Hagar Alaa	T1 associate	Phone	MX Associate-L1	W18	1-Jan-02	14-Jul-25	Active	marwanmmz1102@gmail.com	marwan.zakaria@tempo.fit	1207283000	N/A	Muslim	Male	Graduated	Masr el gedida			Egyptian
+Shahd Emad	861	0	Ahmed El Sawy	Hagar Alaa	T1 associate	Phone	MX Associate-L1	W19	14-Feb-03	11-Aug-25	Active	eshahd484@gmail.com	shahd.emad@tempo.fit	1024180845	Maadi	Muslim	Male	Undergraduated	Maadi		
+Ahmed Nasser abdelhakim	862	0	Ahmed El Sawy	Hagar Alaa	T1 associate	Phone	MX Associate-L1	W19	19-Jul-00	11-Aug-25	Active	an352870@gmail.com	ahmed.abdelhakim@tempo.fit	1110551034	Alf Maskan	Muslim	Female	Graduated	Masr el gedida		
+Santos Nyikang	839	839	Ahmed Hamed	Fatma Mohamed	T2/Cancellation	T2/Cancellation	T2/Cancellation	W17		20-Jan-25	Active	nyikangsantos@gmail.com	santos.nyikang@tempo.fit	1148770622	Salam/Masr El Gedida	Christian	Male		Salam/Masr El Gedida			-	Forigner
+Youkabed Farid	759	759	Ahmed Hamed	Fatma Mohamed	T2/Cancellation	T2/Cancellation	T2/Cancellation	W10	29-Jul-01	6-Feb-23	Active	youkabedd0@gmail.com	youkabed.farid@tempo.fit	1025333327	Helwan	Christian	Female	Undergraduated	Helwan			H-FX016873	Egyptian
+Marwan Fathi	796	2748	Ahmed Hamed	Fatma Mohamed	T2/Cancellation	T2/Cancellation	T2/Cancellation	W11	23-Dec-97	13-Mar-23	Active	mangawyboyka@gmail.com	marwan.fathi@tempo.fit	2.01154E+11	6th October	Muslim	Male	Graduated	6th October			Egyptian
+Emad Mohamed	467	2593	Mohamed Mounir	N/A	T2/Mentor	T2/Mentor	T2/Mentor	W3	15-Mar-86	15-Nov-21	Active	emad.elbially7@gmail.com	emad.mohamed@tempo.fit	1007307851	Salam/Masr El Gedida	Muslim	Male	Graduated	Ain Shams			H-FX016932	Egyptian
+Rashad Mohamed	792	2742	Mohamed Mounir	N/A	T2/Mentor	T2/Mentor	T2/Mentor	W11	25-Oct-01	13-Mar-23	Active	rashadmohamed528@icloud.com	rashad.mohamed@tempo.fit	2.01051E+11	N/A	Muslim	Male	Undergraduated	West El Balad			Egyptian
+Noha Radwan Abdulaziz	808	0	Mohamed Mounir	N/A	T2/Mentor	T2/Mentor	T2/Mentor	W13	12-Jul-01	13-Nov-23	Active	noha.rad.01@gmail.com	noha.radwan@tempo.fit	2.0115E+11	Tagamu3	Muslim	Female	Graduated	Future City			H-FW022015	Egyptian
+Khaled ahmed mohamed yousof	787	2737	Khaled El Sabban	Fatma Mohamed	T2/Tech	T2/Tech	T2/Tech	W11	3-Nov-01	13-Mar-23	Active	khaledyousof17@gmail.com	khaled.ahmed@tempo.fit	2.01123E+11	Maadi	Muslim	Male	Undergraduated	Maadi			Egyptian
+Ahmed Mahmoud	209	2548	Khaled El Sabban	Bassam Tarek	T2/Tech	T2/Tech	T2/Tech	W2	22-Feb-94	21-Jun-21	Active	Ahmedmahmoudbusiness@protonmail.com	ahmed.mahmoud@tempo.fit	1225377451	October-Zayed	muslim	Male	Graduated	Manial			H-FX016865	Egyptian
+Mohamed Mounir AbdMagid	180	2507	Nancy Elsharony	N/A	Team and change Integration Manager	Team Lead / Change Integration Manager	Team Lead / Change Integration Manager	W1	8-Jan-96	5-Apr-21	Active	ayadm9395@gmail.com	mohamed.abdelmagid@tempo.fit	1552600480	Tagamu3	Muslim	Male	Undergraduated	Tagamoaa 5			H-FX016873	Egyptian
+Ahmed Elsawy	218	2542	Khaled El Sabban	N/A	Team Lead	Team Lead	Team Lead	W2	21-Oct-96	21-Jun-21	Active	ah_abd_hameed@hotmail.com	ahmed.elsawy@tempo.fit	1204244269	Madinat Nasr	Muslim	Male	Graduated	nasr city			H-FW021934	Egyptian
+Ahmed Hamed	465	2587	Khaled El Sabban	N/A	Team Lead	Team Lead	Team Lead	W3	4-Dec-91	15-Nov-21	Active	ahdabdallahmd@gmail.com	ahmed.hamed@tempo.fit	1061560805	Faisal	Muslim	Male	Graduated	Giza			H-FX016875	Forigner
+Menna Yasser	405	2583	Nancy Elsharony	N/A	Training & Development Manager	Training & Development Manager	Training & Development Manager	W2	21-Jun-95	6-Sep-21	Active	menayasser1995@gmail.com	menna@tempo.fit	1121338888	N/A	Muslim	Female	Graduated	Shoubra			H-FX016917	Egyptian
+Mostafa Adel	522	2660	Mohamed Halim	N/A	Workforce Analyst	Workforce Analyst	Workforce Analyst	W7	4-Dec-89	25-Jul-22	Active	mostafasalehshetos@gmail.com	mostafa.adel@tempo.fit	1111175117	Faisal	Muslim	Male	Graduated	Faisal			H-FW021979	Egyptian
+Mohamed Halim	401	2582	Nancy Elsharony	N/A	Workforce Manager	Workforce Manager	Workforce Manager	W2	10-Apr-91	1-Sep-21	Active	mhalim265@gmail.com	halim@tempo.fit	1120222674	Faisal	Muslim	Male	Graduated	Faisal		Not Received	Egyptian
+Bassem Hesham	216	2567	Khaled El Sabban	Bassam Tarek	T2/Tech	T2/Tech	T2/Tech	W2	11-Sep-96	21-Jun-21	Inactive	jbm.stick@hotmail.com	bassem.hesham@tempo.fit	1149644704	N/A	Muslim	Male	Graduated	Dar El Salam	1-Nov-25	Resignation	Resignation	H-FX016910	Egyptian
+Bassam Tarek	847	847	Heba El Sobky	N/A	QA	QA	Quality Assurance associate	W17		20-Jan-25	Inactive	bassamtareq1997@gmail.com	bassam.tareq@tempo.fit	1099171617	Faisal	Muslim	Male		Faisal	30-Jun-25	EOP		-	Egyptian
+Jannah Tarek	844	844	Ahmed El Sawy	Fatma Mohamed	T1 associate	Chat	MX Associate-L1	W17		20-Jan-25	Inactive	gannatarek543@gmail.com	jannah.tarek@tempo.fit	1017855984	Salam/Masr El Gedida	Muslim	Female		Salam/Masr El Gedida	26-May-25	EOP		-	Egyptian
+Ruba Kirksawai	843	843	Ahmed El Sawy	Fatma Mohamed	T1 associate	Chat	MX Associate-L1	W17		20-Jan-25	Inactive	rlee12062@gmail.com	ruba.kirksawai@tempo.fit	1223007275	Maadi	Christian	Female		Maadi	19-May-25	Resign	Resign	-	Forigner
+Julia George	845	845	Ahmed El Sawy	Fatma Mohamed	T1 associate	Phone	MX Associate-L1	W17		20-Jan-25	Inactive	georgejulia472@gmail.com	julia.george@tempo.fit	1140257439	Maadi	Christian	Female		Maadi	19-May-25	Failed Probation	Failed Probation	-	Forigner
+Mohamed Amin	166	2505	Nancy Elsharony	N/A	Quality Manger	Quality and Change Manger	Quality and Change Manger	W0	28-Oct-85	8-Mar-21	Inactive	mohamed.effat.amin@gmail.com	mohamedamin@tempo.fit	1028243337	Shoubra	Muslim	Male	Graduated	Warraq El Hadar	31-Mar-25	Resign		Not Received	Egyptian
+Maryam Ussama	481	2606	Mohamed Mounir	N/A	Social	Social	Social	W4	6-Jan-00	7-Mar-22	Inactive	maryamussama7777@gmail.com	maryam.ussama@tempo.fit	1098116099	Madinat Nasr	Muslim	Female	Graduated	Nasr City	11-Mar-25	Resign	Resign	H-FX016921	Egyptian
+Shayma Hashem	475	2596	Mohamed Amin	N/A	QA	QA	Quality Assurance associate	W4	9-Sep-89	7-Mar-22	Inactive	shaimaa.7h89@gmail.com	shayma@tempo.fit	1097077436	Tagamu3	Muslim	Female	Graduated	New Cairo	31-Jan-25	RS		H-FX016903	Egyptian
+Habiba Hassan	833	0	Ahmed El Sawy	Shayma Hashem	T1 associate	Chat	MX Associate-L1	W16	18-May-05	5-Aug-24	Inactive	habibaelatwwar@icloud.com	habiba.hassan@tempo.fit	1125211549	Salam/Masr El Gedida	Muslim	Female	Undergraduate	Salam/Masr El Gedida	31-Jan-25	RS	RS	
+Yagusuk Kamilo	181	2527	Ahmed Hamed	Mohamed Amin	T2/Cancellation	T2/Cancellation	T2/Cancellation	W1	17-Jul-98	5-Apr-21	Inactive	sharp6520@gmail.com	yagusuk@tempo.fit	1157669262	N/A	Christian	Male	Undergraduated	Maadi	25-Dec-24	TR		H-FX016857	Forigner
+Islam Adam	173	2526	Heba El Sobky	Shayma Hashem	T1 associate	Chat	MX Associate-L1	W1	27-Mar-92	5-Apr-21	Inactive	soma-12392@hotmail.com	islam.adam@tempo.fit	1157858531	Tagamu3	Muslim	Female	Graduated	Faisal	26-Dec-24	TR		H-FX016855	Forigner
+Mostafa Gaballa	474	2529	Khaled El Sabban	Mohamed Amin	T2/Tech	T2/Tech	T2/Tech	W3	19-Sep-91	15-Nov-21	Inactive	gaballamustafa75@gmail.com	mostafa.gaballah@tempo.fit	1157782653	Faisal	Muslim	Male	Graduated	Faisal	29-Nov-24	TR		H-FX016920	Egyptian
+Mohamed Mostafa	815	0	Heba El Sobky	Shayma Hashem	T1 associate	Chat	MX Associate-L1- new hire	W15	28-Jun-91	29-Apr-24	Inactive	7amanta2oush@gmail.com	mohamed.mostafa@tempo.fit	1017417911	n/A	Muslim	Male	Graduated	Maadi	8-Dec-24	TR		
+Ramy Ghazala	497	2622	Ahmed Hamed	Mohamed Amin	T2/Cancellation	T2/Cancellation	T2/Cancellation	W5	9-Mar-92	6-Jun-22	Inactive	kartushiii9@gmail.com	ramy.ghazala@tempo.fit	1096707090	Salam/Masr El Gedida	Musilm	Male	Graduated	Shoubra	30-Nov-24	RS		H-FW021910	Egyptian
+Taher El Tohamy	828	0	Ahmed El Sawy	Mohamed Amin	T2/Cancellation	T2/Cancellation	T2/Cancellation	W16	30-Aug-87	5-Aug-24	Inactive	tahereltohamy87@gmail.com	taher.eltohamy@tempo.fit	1114783010	Maadi	Muslim	Male	Graduated	Maadi	6-Dec-24	RS		
+Reem Bashery	822	0	Ahmed El Sawy	Shayma Hashem	T1 associate	Phone	MX Associate-L1	W16	7-Feb-74	5-Aug-24	Inactive	reem.moh.bashery@gmail.com	reem.bashery@tempo.fit	1101601454	Shoubra	Muslim	Female	Graduated	Shoubra	29-Nov-24	
+Youness Walid	830	0	Ahmed El Sawy	Shayma Hashem	T1 associate	Chat	MX Associate-L1	W16	18-Mar-04	5-Aug-24	Inactive	Younessharon@gmail.com	youness.walid@tempo.fit	1122628482	Faisal	Muslim	Male	Undergraduate	Faisal	28-Nov-24	
+Karim Sayed Hassan	825	0	Ahmed El Sawy	Mohamed Amin	T2/Cancellation	T2/Cancellation	T2/Cancellation	W16	28-Sep-89	5-Aug-24	Inactive	karimhassan012@gmail.com	karim.sayed@tempo.fit	1028843667	Maadi	Muslim	Male	Graduated	Maadi	18-Nov-24	TR	TR	
+Abdelmounem Attia	827	0	Ahmed El Sawy	Shayma Hashem	T1 associate	Chat	MX Associate-L1	W16	10-May-83	5-Aug-24	Inactive	abdelmounemattia88@gmail.com	abdelmounem.attia@tempo.fit	1020805364	Maadi	Muslim	Male	Graduated	Maadi	15-Nov-24	PP	PP	
+Mariam Ahmed Saleh	829	0	Ahmed El Sawy	Shayma Hashem	T1 associate	Chat	MX Associate-L1	W16	30-Sep-04	5-Aug-24	Inactive	mariamahmedd1@hotmail.com	mariam.saleh@tempo.fit	1098002898	Maadi	Muslim	Female	Undergraduate	Maadi	10-Nov-24	Resigned	Resigned	
+Ali Farahat	838	0	Ahmed El Sawy	Shayma Hashem	T1 associate	Chat	MX Associate-L1	W16	12-Jul-04	5-Aug-24	Inactive	alialmongy@gmail.com	ali.farahat@tempo.fit	0 1113222603	Shoubra	Muslim	Male	Undergraduate	Shoubra	8-Nov-24	Resigned	Resigned	
+Mazen Atef Youssef	821	0	Ahmed El Sawy	Shayma Hashem	T1 associate	Chat	MX Associate-L1	W16	1-Jan-04	5-Aug-24	Inactive	mazenkhayat6@gmail.com	mazen.khayat@tempo.fit	1005872558	Tagmo3	Muslim	Male	Undergraduate	Tagmo3	14-Oct-24	Dismissed	Dismissed	
+Mohammed Elias	480	2597	Mohamed Mounir	Heba El Sobky	T2/Mentor	T2/Mentor	Mentor	W4	27-Jul-89	7-Mar-22	Inactive	khanjar.elias@yahoo.com	mohammed.elias@tempo.fit	1553427278	Madinat Nasr	Muslim	Male	Graduated	Nasr City	30-9-2024	Resigned	Travel	H-FX016909	Forigner
+Mahmoud Fathy	813	0	Heba El Sobky	Shayma Hashem	T1 associate	Phone	MX Associate-L1- new hire	W14	21-Sep-02	18-Mar-24	Inactive	fathy93@outlook.com	mahmoud.fathy@tempo.fit		Helwan	Muslim	Male	Undergraduated	Helwan	18-Sep-24	Resigned	
+Ahmed Abdelraheem	810	0	Mustafa Awadallah	Shayma Hashem	T1 associate	Chat	MX Associate-L1- new hire	W14	4-Jan-99	18-Mar-24	Inactive	ahmed.3br7eem@gmail.com	ahmed.abdelraheem@tempo.fit		Faisal	Muslim	Male	Undergraduated	Faisal	31-Aug-24	Resigned	
+Mustafa Awadallah	454	2595	Khaled El Sabban	N/A	Team Lead	Team Lead	Team Lead	W3	1-Oct-93	15-Nov-21	Inactive	estasaawad@gmail.com	mustafa.awadallah@tempo.fit	1011935341	Salam/Masr El Gedida	Muslim	Male	Graduated	Al Matareya	31-Aug-24	Resigned	H-FX016919	Egyptian
+Muhammad Nadir	799	2746	Ahmed El Sawy	Shayma Hashem	T1 associate	Email	MX Associate-L1	W11	2-Feb-98	13-Mar-23	Inactive	mu7ammadn2der@gmail.com	mohamed.nader@tempo.fit	2.01153E+11	Faisal	Muslim	Male	Undergraduated	Faisal	21-Aug-24	EOP	
+Abdelrahman Emad	820	0	Mustafa Awadallah	Shayma Hashem	T1 associate	Phone	MX Associate-L1- new hire	W15	16-Jun-97	29-Apr-24	Inactive	abdoemad187@gmail.com	abdelrahman.emad@tempo.fit	1147617264	N/A	Muslim	Male	Graduated	Helwan	5-Aug-24	EOP	
+Mustafa Mohamed	819	0	Mustafa Awadallah	Shayma Hashem	T1 associate	Chat	MX Associate-L1- new hire	W15	22-Dec-00	29-Apr-24	Inactive	mustafameid2@gmail.com	mustafa.mohamed@tempo.fit	1146798885	N/A	Muslim	Male	Graduated	Maadi	27-Jun-24	
+Omar Wael	814	0	Mustafa Awadallah	Shayma Hashem	T1 associate	Chat	MX Associate-L1- new hire	W14	27-May-04	18-Mar-24	Inactive	omarabdalla076@gmail.com	omar.wael@tempo.fit		Helwan	Muslim	Male	Undergraduated	Helwan	1-Jul-24	
+Andrew Khalil	504	2633	Mohamed Mounir	Heba El Sobky	T2/Mentor	T2/Mentor	Mentor	W6	19-Nov-01	29-Jun-22	Inactive	andykhalil01@gmail.com	andrew.osama@tempo.fit	1033714741	Faisal	Christian	Male	Undergraduated	N/A	1-Jul-24	
+Nourhan Morris	227	2564	Khaled El Sabban	Heba El Sobky	T2/Tech	T2/Tech	T2/Tech	W2	17-Sep-99	21-Jun-21	Inactive	nourhan.nana77@gmail.com	nourhan.morris@tempo.fit	1117687997	Shoubra	Christian	Female	Undergraduated	AlDaher	30-Jun-24	
+Mahmoud El Abnoudy	197	2531	Menna Yasser	N/A	Trainer	Trainer	Trainer	W2	29-Jul-92	21-Jun-21	Inactive	mahmoud.alabnoudy@gmail.com	mahmoudalabnoudy@tempo.fit	1032641602	Faisal	Muslim	Male	Graduated	Faisal	13-Jun-24	Resigned	Better Offer	H-FX016853	Egyptian
+Karim Alwi	818	0	Mustafa Awadallah	Shayma Hashem	T1 associate	Chat	MX Associate-L1- new hire	W15	19-Apr-88	29-Apr-24	Inactive	kay.alwi@gmail.com	karim.alwi@tempo.fit	1005548220	N/A	Muslim	Male	Graduated	Maadi	Resigned 	Better Offer	
+Shoukry Boules	186	2512	Khaled El Sabban	N/A	Team Lead	Team Lead	Team Lead	W1	4-Aug-96	5-Apr-21	Inactive	shoukryboules@gmail.com	shoukryboules@tempo.fit	1097844172	Salam/Masr El Gedida	Christian	Male	Undergraduated	Ein Shams - Metro Station - Ring Road	15-May-24	Pesonal Issues	Pesonal Issues	H-FX016866	Egyptian
+Abdelrahman Fathy	539	2678	Mustafa Awadallah	Shayma Hashem	T1 associate	Email	MX Associate-L1	W7	1-Jul-99	25-Jul-22	Inactive	af91427@gmail.com	abdelrahman.fathy@tempo.fit	1010059593	Helwan	Muslim	Male	Undergraduated	#N/A	1-May-24	Termination	Termination	
+Stephan Radu	513	2642	Ahmed Hamed	Heba El Sobky	T2/Cancellation	T2/Cancellation	T2/Cancellation	W6	16-Jan-97	27-Jun-22	Inactive	stephan.onose@gmail.com	stephan.radu@tempo.fit	1033653572	N/A	Muslim	Male	Graduated	Tagmo3	19-Mar-24	Termination	Termination	H-FW021915	Forigner
+Ahmed Nour	807	0	Mustafa Awadallah	Shayma Hashem	T1 associate	Chat	MX Associate-L1- new hire	W13	8-Apr-90	13-Nov-23	Inactive	a.nooreldien@gmail.com	"ahmed.nour@tempo.fit	"	2.01008E+11	N/A	Muslim	Male	Graduated	Suiz	10-Mar-24	Terminnation	H-FX016901	Egyptian
+Mohamed Salah	187	2522	Mustafa Awadallah	Shayma Hashem	T1 associate	Email	MX Associate-L1	W1	17-Oct-90	5-Apr-21	Inactive	msa7md@gmail.com	mohammad.salah@tempo.fit	1000000000	Salam/Masr El Gedida	Muslim	Male	Graduated	Heliopolis	4-Feb-24	Termination	Termination	H-FX016916	Egyptian
+Moataz Ahmed	493	2618	Ahmed Hamed	Heba El Sobky	T1 associate	Phone	T2/Cancellation	W5	29-Jul-02	6-Jun-22	Inactive	moatazahmedmarouf@gmail.com	moataz.ahmed@tempo.fit	1002967903	Tagamu3	Musilm	Male	Undergraduated	Tagamu3	28-Jan-24	
+Osama Abo Elfadl	806		Ahmed El Sawy	Shayma Hashem	T1 associate	Phone	MX Associate-L1- new hire	W13	3-Feb-96	13-Nov-23	Inactive	xrakanchan@gmail.com	ossama.aboelfadl@tempo.fit	2.0102E+11	N/A	Muslim	Male	Undergraduated	Maddi	28-Jan-24	
+Ahmed Usama	196	2530	Mohamed Amin	Heba El Sobky	QA	QA	Quality Assurance associate	W2	8-Jul-90	21-Jun-21	Inactive	ahmedusama46@gmail.com	ahmedusama@tempo.fit	1023689094	Faisal	Muslim	Male	Graduated	Faisal	8-Jan-24	
+Eman Ahmed	532	2671	Mustafa Awadallah	Heba El Sobky	T1 associate	Chat	MX Associate-L1	W7	1-Sep-97	25-Jul-22	Inactive	emyhassanin44@gmail.com	eman.ahmed@tempo.fit	1155226073	Faisal	Muslim	Female	N/A	#N/A	14-Jan-24	Termination	Termination	
+Hassan Kelhi	809		Mustafa Awadallah	Shayma Hashem	T1 associate	Email	MX Associate-L1- new hire	W13	7-Jan-96	13-Nov-23	Inactive	hassankelhi@gmail.com	"hassan.kelhi@tempo.fit	"	201111246745 - 201004916544	October-Zayed	Muslim	Male	Graduated	Shekhzaid	26-Dec-23	
+Walaa Khamis	810		Mustafa Awadallah	Shayma Hashem	T1 associate	Phone	MX Associate-L1- new hire	W13	29-Jan-00	13-Nov-23	Inactive	walaakhamis2912@gmail.com	walaa.khamis@tempo.fit	2.01019E+11	Mokattam	Muslim	Female		Maddi	11-Dec-23	
+Lina Hesham	224	2550	Mohamed Mounir	N/A	Social	Social	Social	W2	29-Aug-21	29-Aug-21	Inactive	lina.hesham33@gmail.com	linahesham@tempo.fit	1094663733	N/A	Muslim	Female	Graduated	mokkatam	30-Nov-23	
+Hisham abdelhakim mohamed khalil	804	2749	Ahmed El Sawy	Shayma Hashem	T1 associate	Phone	MX Associate-L1- new hire	W11	16-Sep-98	13-Mar-23	Inactive	hishamabdo561@gmail.com	hisham.khalil@tempo.fit	2.01555E+11	Hadayek el maadi	Muslim	Male	Graduated	Hadayek el maadi	30-Nov-23	
+Nourhan Gamal Seleem	784	2734	Ahmed El Sawy	Shayma Hashem	T1 associate	Phone	MX Associate-L1- new hire	W11	1-Jan-99	13-Mar-23	Inactive	nourhan.wvb@gmail.com	nourhan.gamal@tempo.fit	1090831445	Hadayek Al qobba	Muslim	Female	Graduated	Masr el gedida	15-Dec-23	
+Hadia Ahmed	764	764	Mustafa Awadallah	Shayma Hashem	T1 associate	MX	MX Associate-L1- new hire	W10	6-Oct-97	6-Feb-23	Inactive	hadiaebrahem41@gmail.com	hadia.ahmed@tempo.fit	1113361553	Tagmo3	Muslim	Female	Graduated	Tagmo3	21-Nov-23	Termination 	Termination 	H-FX016899	Egyptian
+Mariam Essam Hamed El-Kahky	763	763	Mustafa Awadallah	Shayma Hashem	T1 associate	MX	MX Associate-L1- new hire	W10	1-Apr-01	6-Feb-23	Inactive	mariamessam837@gmail.com	mariam.essam@tempo.fit	1152424538	Helwan	Muslim	Female	Graduated	73 omar ibn Elkhtab st hadyek Helwan, Cairo	16-Oct-23	
+Mohamed Abo El Naga	509	2638	Mustafa Awadallah	Shayma Hashem	T1 associate	Email	MX Associate-L1	W6	18-Feb-89	27-Jun-22	Inactive	ENG.MOH1989@GMAIL.COM	mohamed.aboelnaga@tempo.fit	1013789879	N/A	Muslim	Male	Graduated	Madint Nasr	29-Oct-23	
+Yasmin Hany	544	2681	Ahmed El Sawy	Mohamed Amin	T1 associate	Email	MX Associate-L1	W7	18-Jan-00	25-Jul-22	Inactive	yasminehanyfarid@gmail.com	yasmin.hany@tempo.fit	1004796340	N/A	Muslim	Female	Graduated	#N/A	15-Oct-23	
+Hussein abdelshakor	774	2728	Mustafa Awadallah	Shayma Hashem	T1 associate	MX	MX Associate-L1- new hire	W10	10-Sep-97	6-Feb-23	Inactive	Hshakor133@gmail.com	hussien.abdelshakor@tempo.fit	1148009827	N/A	Muslim	Male	Graduated	Maadi	11-Oct-23	
+Kareem Raouf	484	2604	Mustafa Awadallah	Shayma Hashem	T1 associate	Chat	MX Associate-L1	W4	24-Aug-97	7-Mar-22	Inactive	kareem.raouf@msa.edu.eg	kareem.raouf@tempo.fit	1024004020	Faisal	Muslim	Male	Graduated	Fasial	31-Oct-23	
+Elijah Mawut Panchol	757	757	Ahmed Hamed	Heba El Sobky	T2/Cancellation	T2/Cancellation	T2/Cancellation	W10	8-Mar-95	6-Feb-23	Inactive	mavocals1995@gmail.com	eijah.nacho@tempo.fit	1149732662	N/A	Christian	Male	Undergraduated	Maadi	31-Oct-23	
+Ahmed Ibrahim	802	2739	Ahmed El Sawy	Heba El Sobky	T1 associate	MX	MX Associate-L1- new hire	W11	4-Aug-93	13-Mar-23	Inactive	ik.9ine3hree@gmail.com	ahmed.khalil@tempo.fit	1065566884	1st settelement	Muslim	Male	Graduated	Madint Nasr	29-Sep-23	
+Abdelrahman Osama	538	2677	Khaled El Sabban	Shayma Hashem	Fitness Concierge	Fitness Concierge	FItness Concierge	W7	12-Jul-99	25-Jul-22	Inactive	abdelrahmanosama311@gmail.com	abdelrahman.osama@tempo.fit	1144305387	Helwan	Muslim	Male	Graduated	#N/A	4-Sep-23	Failed Certification	
+Shaymaa Gomaa	500	2625	Khaled El Sabban	Shayma Hashem	Fitness Concierge	FItness Concierge	FItness Concierge	W5	14-May-98	6-Jun-22	Inactive	shimaa1451998@gmail.com	shaymaa.gomaa@tempo.fit	1000321188	Helwan	Musilm	Female	Graduated	Helwan	1-Sep-23	
+Anissa Almahayni	550	2685	Khaled El Sabban	Mohamed Amin	Fitness Concierge	Fitness Concierge	FItness Concierge	W7	10-Dec-01	25-Jul-22	Inactive	anissaalmahayni4@gmail.com	anissa.almahayni@tempo.fit	1061180512	Faisal	Muslim	Female	Undergraduated	#N/A	4-Sep-23	Resigned	
+Hesham Ahmed	535	2674	Khaled El Sabban	Mohamed Amin	Fitness Concierge	Fitness Concierge	FItness Concierge	W7	5-Dec-96	25-Jul-22	Inactive	hesham.a.wageeh@gmail.com	hesham.ahmed@tempo.fit	1111297181	N/A	Muslim	Male	Graduated	#N/A	31-Aug-23	Failed Certification	
+Mohamed Saleh	494	2629	Khaled El Sabban	Mohamed Amin	Fitness Concierge	FItness Concierge	FItness Concierge	W5	1-Jan-88	6-Jun-22	Inactive	mimovot@gmail.com	mohamed.saleh@tempo.fit	1112833472	October-Zayed	Musilm	Male	Graduated	October-Zayed	31-Aug-23	Failed Certification	H-FX016913	Egyptian
+Haitham Sharkas	521	2662	Khaled El Sabban	Mohamed Amin	Fitness Concierge	Fitness Concierge	FItness Concierge	W7	5-Feb-96	25-Jul-22	Inactive	haitham.sharkas@hotmail.com	haitham.sharkas@tempo.fit	1065975970	N/A	Muslim	Male	Undergraduated	#N/A	4-Sep-23	Failed Certification	H-FW021920	Egyptian
+Amin Mohamed	168	2504	Khaled El Sabban	N/A	Team Lead	Team Lead	Team Lead	W1		1-Apr-21	Inactive	amen.aborabia@gmail.com	aminmohamed@tempo.fit	0 114 947 4689/0 100 607 8692	Faisal	Muslim	Male	Graduated	Haram	31-Aug-23	
+Louis Jean Pie Mukenge Bantu	722	722	Ahmed Hamed	Heba El Sobky	T2/Cancellation	T2/Cancellation	T2/Cancellation	W8		23-Nov-22	Inactive	lucthedancerr@gmail.com	louis.jean@tempo.fit	0 106 643 0954	Madinat Nasr	Christian	Male	Graduated	Maadi	28-Aug-23	End Of Contract	End Of Contract	
+Mahmoud Mohamed Fathy	797	2747	Ahmed Hamed	Heba El Sobky	T2/Cancellation	T2/Cancellation	T2/Cancellation	W11		13-Mar-23	Inactive	fathy93@outlook.com	mahmoud.mohamed@tempo.fit	1024291966	Hadayek Helwan	Musilm	Male	Undergraduated	Helwan	31-Aug-23	Personal Reasons	Personal Reasons	Egyptian
+Shady Sabry	499	2624	Khaled El Sabban	Mohamed Amin	Fitness Concierge	FItness Concierge	FItness Concierge	W5		6-Jun-22	Inactive	shadowsabry11@gmail.com	shady.sabry@tempo.fit	1123810426	Helwan	Musilm	Male	Undergraduated	Helwan	17-Aug-23	Termination 	Termination 	H-FX021919	Egyptian
+Marina Safwat	508	2636	Khaled El Sabban	Mohamed Amin	Fitness Concierge	Fitness Concierge	FItness Concierge	W6		27-Jun-22	Inactive	Marinassn97@gmail.com	marina.safwat@tempo.fit	1275599680	Salam/Masr El Gedida	Muslim	Female	Graduated	Salam/Masr El Gedida	31-Aug-23	Better Offer	Better Offer	H-FW021913	Egyptian
+Muhammad Abo Zaid	795	2745	Ahmed El Sawy	N/A	T1 associate	Phone	MX Associate-L1- new hire	W11		13-Mar-23	Inactive	m7mdxp@gmail.com	mohamed.abozeid@tempo.fit	2.01212E+11	Helwan	Muslim	Male	Graduated	Helwan	8-Aug-23	failed probation	failed probation	
+Mona Abduallah Ammar	561	712	Mustafa Awadallah	N/A	T1 associate	MX	MX Associate-L1- new hire	W8		21-Nov-22	Inactive	mona.abdullah.498@gmail.com	mona.abduallah@tempo.fit	0 110 051 5906	Helwan	Muslim	Female	Graduated	Thakanat Al Maadi	31-Aug-23	Personal Reasons	Personal Reasons	Egyptian
+Sabrine Hassan	549	2690	Khaled El Sabban		Fitness Concierge	Fitness Concierge	FItness Concierge	W7		7/25/2022	Inactive	sabrineabdelmujiid@gmail.com	sabrine.hassan@tempo.fit	1121596345	N/A	Muslim	Female	#N/A	#N/A	7/27/2023	Personal Reason	Personal Reason	
+Farida Khaled	540	2687	Shahenda Ahmed		Certification	Certification	MX Associate-L1- new hire	W7		7/25/2022	Inactive	farida.kahled17@gmail.com	farida.khaled@tempo.fit	1012576040	N/A	Muslim	Female	#N/A	#N/A	8/25/2022	Failed Certification	Failed Certification	
+Mariam Ramadan Othman	548	2689	Shahenda Ahmed		Certification	Certification	MX Associate-L1- new hire	W7		7/25/2022	Inactive	mariammimii@icloud.com	mariam.ramadan@tempo.fit	1030635681	N/A	Muslim	Female	#N/A	#N/A	8/24/2022	Failed Certification	Failed Certification	
+Mahmoud Yasser	541	2679	Shahenda Ahmed		Certification	Certification	MX Associate-L1- new hire	W7		7/25/2022	Inactive	mahmoudyasser2003@gmail.com	mahmoud.yasser@tempo.fit	1012436948	N/A	Muslim	Male	#N/A	#N/A	8/24/2022	Failed Certification	Failed Certification	
+Mohamed Saed	551	2686	Shahenda Ahmed		Certification	Certification	MX Associate-L1- new hire	W7		7/25/2022	Inactive	m7mdsa3ed4@gmail.com	mohamed.saed@tempo.fit	1114070070	October-Zayed	Muslim	Male	#N/A	#N/A	8/24/2022	Failed Certification	Failed Certification	
+George Samir	547	2684	Training 7A/Mariam		Certification	Certification	MX Associate-L1- new hire	W7		7/25/2022	Inactive	george.samir44@yahoo.com	george.samir@tempo.fit	1553798510	N/A	Christian	Male	#N/A	#N/A	8/18/2022	Failed Certification	Failed Certification	
+Youssef Sayid	543	2688	Training 7A/Mariam		Certification	Certification	MX Associate-L1- new hire	W7		7/25/2022	Inactive	youssifsayd100@gmail.com	youssef.sayid@tempo.fit	1128284151	Helwan	Muslim	Male	#N/A	#N/A	8/16/2022	Failed Certification	Failed Certification	
+Mira Maged	518	2669	Training 7B/Aya		Certification	Certification	MX Associate-L1- new hire	W7		25/7/2022	Inactive	miramaged1810@gmail.com	mira.maged@tempo.fit	1203300291	Salam/Masr EL Gedida	Christian	Female	#N/A	#N/A	8/21/2022	Transportation, Adherence	No show	H-FW022009	Egyptian
+Rana Amr	524		Training 7B/Aya		Certification	Certification		W7		25/7/2022	Inactive	ranoosh25990@gmail.com	rana.amr@tempo.fit	1090305862	N/A	Muslim	Female	#N/A	#N/A	44788	No Transportation Available	No Transportation Available	
+Rawya Alor	520	2661	Training 7B/Aya		Certification	Certification	MX Associate-L1- new hire	W7		25/7/2022	Inactive	rawya.alor111@gmail.com	rawya.alor@tempo.fit	1010198967	N/A	Christian	Female	#N/A	#N/A	8/18/2022	Failed Certification	Failed Certification	H-FW022007	Forigner
+Sandy Sameh	516	2657	Training 7B/Aya		Certification	Certification	MX Associate-L1- new hire	W7		25/7/2022	Inactive	sandysameh82@gmail.com	sandy.sameh@tempo.fit	1066258547	N/A	Muslim	Female	#N/A	#N/A	8/19/2022	Bad behavior with the TL	Attitude	H-FW022018	Egyptian
+Zaynab Hassan	527		Training 7B/Aya		Certification	Certification		W7		25/7/2022	Inactive	hassanzeze33@gmail.com	zaynab.hassan@tempo.fit	1151546672	N/A	Muslim	Female	#N/A	#N/A	8/15/2022	No Transportation Available	No Transportation Available	
+Mok Yol	525	2664	Training 7B/Aya		Certification	Certification	MX Associate-L1- new hire	W7		25/7/2022	Inactive	cavalli.quan012@gmail.com	mok.yol@tempo.fit	1009812715	N/A	Christian	Male	#N/A	#N/A	8/17/2022	Failed Certification	Failed Certification	
+Ring Kuol	526	2665	Training 7B/Aya		Certification	Certification	MX Associate-L1- new hire	W7		25/7/2022	Inactive	ringkuol888@gmail.com	ring.kuol@tempo.fit	1141522925	N/A	Christian	Male	#N/A	#N/A	8/22/2022	Failed Calls retake	Certification	H-FW02188	Forigner
+Zyad Zakarya	230		Gendy		CS			W2	44437	6/23/2021	Inactive	zyadalizakarya1996@gmail.com	zyadzakarya@tempo.fit	1159144558	N/A	Muslim	Male	Undergraduated	Nasr City	9/24/2021	9/24/2021		H-FX016872	Egyptian
+Mohamed El Sheikh	229		Hitham		CS			W2		6/22/2021	Inactive	melsheikh.tp@gmail.com	mohamed.elsheikh@tempo.fit	1017047661	N/A	Muslim	N/A	N/A	Ain Shams	7/15/2021	7/15/2021	disclosing information and inappropriate behavior		Egyptian
+Gomana Ahmed	201		Khaled		CS			W2		6/21/2021	Inactive	kiritoasunayui2011@gmail.com	gomanaahmed@tempo.fit	1120803225	R2	Muslim	N/A	N/A	Faisal	8/2/2021	8/2/2021	Attitude Issue	H-FX016906	Egyptian
+Hasna Sinani	222		Khaled		CS			W2		6/21/2021	Inactive	hasnasulaiman.s@gmail.com	hasnasinani@tempo.fit	1120132101	R4	Muslim	N/A	N/A	nasr city	8/15/2021	8/15/2021		H-FX016918	Forigner
+Mohamed Salim	200		Shahenda		CS			W2		6/21/2021	Inactive	mohammed.a.salim92@gmail.com	mohamed.salim@tempo.fit	01091673321/01092421392	R6	Muslim	N/A	N/A	Rehab City	7/15/2021	7/15/2021	disclosing information and inappropriate behavior		Egyptian
+Abdel Rahman Amin	205		#N/A		CS			W2		6/21/2021	Inactive	abdelrahman_1998@hotmail.com	abdelrahman.amin		R4	Muslim	N/A	N/A	nasr city	7/1/2021	7/1/2021	Failure Termination		Egyptian
+Dalin Medhat	208		#N/A		CS			W2		6/21/2021	Inactive	Dalinmedhat@gmail.com	dalinmedhat		R6	Muslim	N/A	N/A	new cairo	7/1/2021	7/1/2021	Failure Termination		Egyptian
+Shahd Basaeed	249		#N/A		CS			W2		6/21/2021	Inactive	stillms.shoda@gmail.com	shahd@tempo.fit		R1	Muslim	N/A	N/A	waddi el nile	6/21/2021	6/21/2021			Forigner
+Nermeen Ibrahim	496	2621	Ahmed Diab		Fitness Concierge	FItness Concierge	MX Associate-L1- new hire	W5		6/6/2022	Inactive	nermeenibraheem246@gmail.com	nermeen.ibrahim@tempo.fit	1129442627	Shoubra	Musilm	Female			4/11/2023			H-FX016867	Egyptian
+Rawan Tobar	498	2623	Ahmed Diab		Fitness Concierge	FItness Concierge	MX Associate-L1- new hire	W5		6/6/2022	Inactive	toubar.rawan@gmail.com	rawan.akram@tempo.fit	1032664636	Tagamu3	Musilm	Female			5/3/2023			H-FX016858	Egyptian
+Noor alaa	455		Kareem A. Nasser	Mouaiad	Fitness Concierge	Fitness Concierge		W3	25-Apr-02	11/15/2021	Inactive	nourghanem1.ng@gmail.com	noor@tempo.fit	1026656510	Madinat Nasr	Muslim	Female	Undergraduated	Nasr city, Mustafa el nahas	8/8/2022		Code of Conduct	H-FW021946	Egyptian
+Hussien Sherif	198	2563	Kareem Nasser		Fitness Concierge	Fitness Concierge	FC Associate	W2	24-Aug-95	6/21/2021	Inactive	hussiensherif95@gmail.com	hussien.sherif@tempo.fit	1020416817	Salam/Masr El Gedida	muslim	Male	Graduated	Heliopolis	8/31/2022		Got another job offer	H-FX016887	Egyptian
+Khaled Abulyazeed	506	2635	Kareem Nasser		Fitness Concierge	Fitness Concierge	MX Associate-L1- new hire	W6		6/27/2022	Inactive	khaled.yazeed89@gmail.com	khaled.abulyazeed@tempo.fit	1207721291	N/A	Muslim	Male			12/31/2022	Recommend	Got another Job Offer	H-FW021882	Egyptian
+Youssef Wael	514	2644	Kareem Nasser		Fitness Concierge	Fitness Concierge	MX Associate-L1- new hire	W6		6/27/2022	Inactive	yossifwael135@outlook.com	youssef.wael@tempo.fit	1149320399	N/A	Muslim	Male			9/27/2022		Travelling	H-FW021922	Egyptian
+Ahmed Goda	545	2682	Kareem Nasser		Fitness Concierge	Fitness Concierge	MX Associate-L1- new hire	W7		7/25/2022	Inactive	Ahmedgodamm@gmail.com	ahmed.goda@tempo.fit	1121016746	Helwan	Muslim	Male	#N/A	#N/A	1/6/2023			
+Ahmed Maged	517	2655	Kareem Nasser		FItness Concierge	Fitness Concierge	MX Associate-L1- new hire	W7		7/25/2022	Inactive	a.m.omara41@gmail.com	ahmed.maged@tempo.fit	1013418664	Faisal		Male	#N/A	#N/A	9/27/2022		Better Job Offer	H-FW022015	Egyptian
+Seif Aziz	477	2607	Khaled El Sabban		Fitness Concierge	Fitness Concierge	FItness Concierge	W4		3/7/2022	Inactive	seifa7mad138@gmail.com	seif@tempo.fit	1011455691	N/A	Muslim	Male	Undergraduated	El Maadi	7/4/2023			H-FX016924	Egyptian
+Karim Michael	165		#N/A		HR			W0		2/7/2021	Inactive	karimielts@gmail.com	karim@tempo.fit	0 122 103 9100	N/A	Christian	N/A	N/A	Tagamoaa	7/13/2021	7/13/2021	Better Job Offer		Egyptian
+Sherine Hesham	167		Nancy Elsharony		Instructional designer			W0		3/17/2021	Inactive	sherinehesham95@hotmail.com	sherine@tempo.fit	1126566965	R3	Muslim	N/A	N/A	Maadi	9/21/2021	9/21/2021			Egyptian
+Abdel Rahman Abo el Majd	172		Amin		MX			W1		4/5/2021	Inactive	abdelrahman.aboulmajd@outlook.com	abdelrahman.majd@tempo.fit	1014488762	R1	Muslim	N/A	N/A	October Hay Thamen	4/9/2021	4/9/2021	Left Training and didn't give a reason		Egyptian
+Ahmed Mera	242		Amin		MX			W1		4/5/2021	Inactive	ahmed092047@gmail.com	ahmedm@tempo.fit		N/A	Muslim	N/A	N/A	Nasr City	4/5/2021	4/5/2021	Training NO SHOW		Forigner
+Fady Ahmed	243		Amin		MX			W1		4/5/2021	Inactive	fady.ahmed84@yahoo.com	fady.ahmed@tempo.fit		N/A	Muslim	N/A	N/A	Nozha	4/5/2021	4/5/2021	Training NO SHOW		Egyptian
+Hussein Malek Mohamed Awad	244		Amin		MX			W1		4/5/2021	Inactive	hussein_malek@hotmail.com	hussein.malek@tempo.fit		N/A	Muslim	N/A	N/A	Nasr City	4/11/2021	4/11/2021	Dismissed from training for being sick		Egyptian
+Jay Garang	491	2616	Amin Mohamed		MX	Email	MX Associate-L1- new hire	W5		6/6/2022	Inactive	garangamiir@gmail.com	jay.garang@tempo.fit	1116989313	Shoubra	Musilm	Male			10/31/2022	Not Recommended	Travelling	H-FW021911	Forigner
+Mirna Ahmed	507	2637	Amin Mohamed		MX	Chat	MX Associate-L1- new hire	W6		6/27/2022	Inactive	mirna.guith@gmail.com	mirna.ahmed@tempo.fit	1155288198	October-Zayed	Muslim	Female			12/19/2022		Failed PSP	H-FW021902	Egyptian
+Sherine Sameh	512	2641	Amin Mohamed		MX	Email	MX Associate-L1- new hire	W6		6/27/2022	Inactive	sherien10sameh@gmail.com	sherine.sameh@tempo.fit	1228912133	Faisal	Muslim	Female			11/8/2022	Not Recomended	College Attendance	H-FW021914	Egyptian
+Mohamed Taymor	511	2640	Amin Mohamed		MX	Phone	MX Associate-L1- new hire	W6		6/27/2022	Inactive	meshmeshbiss@gmail.com	mohamed.taymor@tempo.fit	1016375895	Madinat Nasr	Muslim	Male			11/29/2022			H-FW021889	Egyptian
+Youssef Sherief	515	2643	Amin Mohamed		MX	Chat	MX Associate-L1- new hire	W6		6/27/2022	Inactive	yousifghorab7@gmail.com	youssef.sherief@tempo.fit	1030420238	Faisal	Muslim	Male			9/30/2022		Better Job Offer	H-FW021905	Egyptian
+Rahma Sayed	528	#N/A	Amin Mohamed	Mohamed Sayed	MX	Phone	MX Associate-L1- new hire	W7		7/25/2022	Inactive	rahmakassem911@gmail.com	rahma.sayed@tempo.fit	1005643229	Faisal		Female	#N/A	#N/A	12/25/2022	Recommended	Family issue	H-FW022011	Egyptian
+Abdelrahman Mostafa	537	2676	Amin Mohamed	Heba El Sobky	MX	Phone	MX Associate-L1- new hire	W7		7/25/2022	Inactive	abdelrrhmanamin@gmail.com	abdelrahman.mostafa@tempo.fit	1095404767	Faisal	Muslim	Male	#N/A	#N/A	12/21/2022	Not recommended 	Immediate resignation		Egyptian
+Mohamed Walid	546	2683	Amin Mohamed		MX	Chat	MX Associate-L1- new hire	W7		7/25/2022	Inactive	Mohamedaisloka@gmail.com	mohamed.walid@tempo.fit	1092491211	N/A	Muslim	Male	#N/A	#N/A	11/24/2022	Not recommended	College Attendance		Egyptian
+Ahmed Khaled	536	2675	Amin Mohamed		MX	Chat	MX Associate-L1- new hire	W7		7/25/2022	Inactive	aboonnnaa@gmail.com	ahmed.khaled@tempo.fit	1064048803	Faisal	Muslim	Male	#N/A	#N/A	11/27/2022		Didn't respect the notice period		Egyptian
+Osman Yahya	529	2666	Amin Mohamed		MX	Email	MX Associate-L1- new hire	W7		7/25/2022	Inactive	osmanmakki68@gmail.com	osman.yahya@tempo.fit	"1554994109\n1554085655(app)"	N/A		Male	#N/A	#N/A	10/31/2022	Recommended	College attendance	H-FW022013	Forigner
+Maged Abdelfatah	534	2673	Amin Mohamed		MX	Email	MX Associate-L1- new hire	W7		7/25/2022	Inactive	eujofanjf2@gmail.com	maged.abdelfatah@tempo.fit	1027972095	N/A	Muslim	Male	#N/A	#N/A	10/5/2022	Another offer	Adherence issues		Egyptian
+Abdel Rahman Samir	177		Gendy		MX			W1		4/5/2021	Inactive	abdelrhmankodira@gmail.com	abdelrhmankodira@tempo.fit		N/A	Muslim	N/A	N/A	Shobra	7/1/2021	7/1/2021			Egyptian
+Mahmoud Marey	245		Gendy		MX			W1		4/5/2021	Inactive	mysterydescription@live.com	m.marey@tempo.fit		N/A	Muslim	N/A	N/A	Awal Gamal - El Salam	6/10/2021	6/10/2021	Terminated for low performance, failed certifications for 3 times		Egyptian
+Obaida Mostafa	246		Gendy		MX			W1		4/5/2021	Inactive	Obaidaphelip@gmail.com	obaidamostafa@tempo.fit		R2	Muslim	N/A	N/A	Haram	4/16/2021	4/16/2021	Dismissed from training for being sick		Egyptian
+Amr El Kosairy	183		Haitham		MX			W1		4/5/2021	Inactive	amrelkosairy@gmail.com	amrelkosairy@tempo.fit	1113395777	R6	Muslim	N/A	N/A	El Shorouk City	8/16/2021	8/16/2021			Egyptian
+Mohamed Mounir	171		Haitham		MX			W1		4/5/2021	Inactive	muhammad.mounir131@gmail.com	mohamed.mounir@tempo.fit	1012195387	R2	Muslim	N/A	N/A	Faisal	9/8/2021	9/8/2021			Egyptian
+Mahmoud Rizk	250		Haitham		MX			W2		6/21/2021	Inactive	tooty1st@gmail.com	mahmoud.rizk@tempo.fit	1067286328	R4	Muslim	N/A	N/A	nasr city	8/27/2021	8/27/2021		H-FX016921	Egyptian
+Andrew Nagy	489		Mohamed Mounir	Mariam	MX			W5		6/6/2022	Inactive	Andrew.aziz2010@gmail.com	andrew.nagy@tempo.fit	1277433053	Faisal	Christian	Male			7/25/2022		2 consecutive NSNC, Not Recommended	H-FX016906	Egyptian
+Abdelrahman Battour	488		Mohamed Mounir	Mariam	MX			W5		6/6/2022	Inactive	Abattour0@gmail.com	abdelrahman.battour@tempo.fit	1069504710						7/5/2022		2 consecutive NSNC, Not Recommended		Egyptian
+Assem Elmallah	490		Mohamed Mounir	#N/A	MX			W5		6/6/2022	Inactive	assemelmalah@gmail.com	assem.elmalah@tempo.fit	1003891228						Friday, July 1, 2022	N/A	Failed Certification/ Cannot commit to working hours at the moment		Egyptian
+Mazen Nagib	492		Mohamed Mounir	#N/A	MX			W5		6/6/2022	Inactive	mazent50@gmail.com	mazen.nagib@tempo.fit	1155103983						Friday, July 1, 2022	N/A	Failed Certification		Egyptian
+Mohammed Seliman	495		Mohamed Mounir	#N/A	MX			W5		6/6/2022	Inactive	m.solima878@gmail.com	mohammed.soliman@tempo.fit	1121197732						Thursday, June 30, 2022	N/A	Failed Certification		Egyptian
+Ahmed Mohamed Yaqoub	191		Shahenda		MX			W1		4/7/2021	Inactive	Oliverwayne020@gmail.com	ahmed.yaqoub@tempo.fit	1018438040	R1	Muslim	N/A	N/A	October	8/25/2021	25/8/2021	work avoidance		Egyptian
+Dina Dawit	195		Shahenda		MX			W2		6/21/2021	Inactive	dodisolomon20@gmail.com	dinadawit@tempo.fit	1068332814	R1	Muslim	N/A	N/A	Ardeluwa	7/29/2021	7/29/2021	Personal	H-FW021921	Forigner
+Yara Raslan	203		Shahenda		MX			W2		6/21/2021	Inactive	Yararaslan624@gmail.com	yararaslan@tempo.fit	1062068611	R4	Muslim	N/A	N/A	nasr city	7/22/2021	7/22/2021	Failed certification	H-FX016921	Egyptian
+Ahmed Gamal	502		Shahenda Ahmed		MX	MX		W6		6/27/2022	Inactive	ahmedpippero99@gmail.com	ahmed.gamal@tempo.fit	1029730082		Muslim	Male			7/20/2022		Failed chat certification	H-FW021912	Egyptian
+Kamal Hassan	505		Shahenda Ahmed		MX	MX		W6		6/27/2022	Inactive	kamalmalik572@gmail.com	kamal.hassan@tempo.fit	1065791435		Muslim	Male			7/20/2022		Failed chat certification		Forigner
+Mohamed Hamdy	510		Shahenda Ahmed		MX	MX		W6		6/27/2022	Inactive	mohamedhamdi8883@gmail.com	mohamed.hamdy@tempo.fit	1156164374	N/A	Muslim	Male			7/20/2022		Failed chat certification	H-FW021883	Egyptian
+Karim Mohamed	-		Training 7A/Mariam		MX	Certification		W7		7/25/2022	Inactive	karimmusa2396@gmail.com	karim.mohamed@tempo.fit	1123053523	October-Zayed	Muslim	Male	#N/A	#N/A	8/11/2022	Adherence / Lateness		
+Shady Mabrouk	248		#N/A		MX			W1		4/5/2021	Inactive	shadymabrouk27@gmail.com	shady.mabrouk@tempo.fit		N/A	N/A	N/A	N/A		6/7/2021	6/7/2021	Dismissed from training for being sick		Egyptian
+Hazem Ahmed	206		#N/A		MX			W2		6/21/2021	Inactive	hazemfayed23@gmail.com	hazem.fayed@tempo.fit	1210194058	R3	Muslim	N/A	N/A	Mokattam	7/1/2021	7/1/2021			Egyptian
+Mahmoud Nabil	233		#N/A		MX			W2		6/21/2021	Inactive	MAHMOUDNABIL92@LIVE.COM	m.nabil@tempo.fit		R1	Muslim	N/A	N/A	mohandessin	6/30/2021	6/30/2021	Resignation, Another Job Offer		Egyptian
+Omar Ali Ibrahim	225		#N/A		MX			W2		6/21/2021	Inactive	omar_ali_1000@hotmail.com	mohamed.elsheikh@tempo.fit		R2	Muslim	N/A	N/A	Faisal	7/1/2021	7/1/2021			Egyptian
+Saleem Idris	247		#N/A		MX			W2		6/24/2021	Inactive				R3	Muslim	N/A	N/A		6/26/2021	6/26/2021			Forigner
+Abdelrahman Essam	214		Amin		MX T1			W2	36456	6/21/2021	Inactive	daddesam@gmail.com	abdelrahman.essam@tempo.fit	1115422897	R3	Muslim	Male	Graduated	Maadi	10/4/2021	10/4/2021		H-FX016923	Egyptian
+Ahmed Saber	240		Amin		MX T1			W2	34454	6/21/2021	Inactive	Alestalgie@gmail.com	a.saber@tempo.fit	1017533418	N/A	Muslim	Male	Graduated	Hadayek Al-Qobba	10/10/2021	10/10/2021		H-FX016903	Egyptian
+Abdelrahman Sayed	469		Amin Mohamed	Mouaiad	MX T1			W3	36638	11/15/2021	Inactive	abdelrahman.mansour20@gmail.com	abdelrahman.sayed@tempo.fit	1159364390	R1	Muslim	Male	Undergraduated	Abdeen	12/27/2021	12/27/2021	Personal Reasons	H-FX016912	Egyptian
+Aly Sayed	219		Khaled El Sabban		MX T1			W2	34385	6/21/2021	Inactive	aly.smsa@gmail.com	aly.sayed@tempo.fit	1026177875	R4	muslim	Male	Graduated	nasr city	10/31/2021	10/31/2021		H-FW021942	Egyptian
+Asmaa Nasser	202		Mohamed Mounir	N/A	MX T1			W2	36376	6/21/2021	Inactive	asmanasser627@gmail.com	asmaanasser@tempo.fit	1018801361	R2	Muslim	Female	Undergraduated	Faisal	12/9/2021	12/9/2021	Resigned / University	H-FX016877	Forigner
+Habiba Abdelbadee	237		Mohamed Mounir	N/A	MX T1			W2	36752	6/21/2021	Inactive	Habibabadee@gmail.com	habiba.abdel@tempo.fit	1097554203	R4	Muslim	Female	Undergraduated	Nasr City	12/12/2021	12/12/2021	Resigned / Work environment	H-FX016881	Egyptian
+Aly Mohamed	241		Mohamed Mounir	Amin	MX T1			W2	36067	6/21/2021	Inactive	alyjagwer@gmail.com	aly.mohammed@tempo.fit	1011867999	R6	Muslim	Male	Graduated	new cairo	12/28/2021	12/28/2021	Another job offer	H-FX016876	Egyptian
+Abdulraheem Hafez	471		Mohamed Mounir	Mouaiad	MX T1			W3	22-Mar-00	11/15/2021	Inactive	beeboxyard@hotmail.com	abdulraheem.hafez@tempo.fit	1026557619	R4	Muslim	Male	Undergraduated	Al Hay Al Asher, Nasr city	1/4/2022	1/4/2022	The agent didn't show up for 3 days with no call	H-FX016926	Egyptian
+Ahmed Farag	464		Mohamed Mounir	Nagy	MX T1			W3	33054	11/15/2021	Inactive	ahmedmfaragg@gmail.com	ahmed.farag@tempo.fit	1115625339	R4	Muslim	Male	Graduated	Masr el Gedida	1/10/2022	1/10/2022	Termination, Poor performance 	H-FX016903	Egyptian
+Heba El Marsafy	223		Mohamed Mounir AbdMagid	Mouaiad	MX T1			W2	34653	6/21/2021	Inactive	hebamarsafy@gmail.com	heba.marsafy@tempo.fit	1101053292	N/A	Muslim	Female	Graduated	old down-town	2/7/2022		Case avoidance/attitude with customers/Failed PSP 	H-FX016898	Egyptian
+Sulafa Abdel Wahab	193		Mohamed Mounir AbdMagid	Amin	MX T1			W2	13-Sep-82	6/21/2021	Inactive	solasaso24@gmail.com	sulafa@tempo.fit	1122399716	R2	Muslim	Female	Graduated	Faisal	2/9/2022		Failed PSP/Performance/Quality	H-FX016863	Forigner
+Abdelrahman ahmed ossama	470		Mohamed Mounir AbdMagid	N/A	MX T1	Email		W3	21/6/1992	11/15/2021	Inactive	ashwilliams303@gmail.com	abdelrahman.ossama@tempo.fit	1284060387	R2	Muslim	Male	Graduated	Giza	3/18/2022		Attendance/Adherence	H-FX016872	Egyptian
+Hager Ibrahim	486		Noury		MX T1			W4		3/7/2022	Inactive	hageribrahim846@gmail.com	hager.ibrahim@tempo.fit	1148911498	Shoubra	Muslim	Female	Graduated	Shubra	4/4/2022		Failed QA Certification	H-FX016926	Egyptian
+Ahmed Tarek			Noury		MX T1			W4		3/7/2022	Inactive	at.ibnzeyad2030@gmail.com	ahmed.tarek@tempo.fit	1155587795	Salam Masr el gededa	Muslim	Male		Hadaq Al quba	
+Ali Shalaby			Noury		MX T1			W4		3/7/2022	Inactive	alishalaby2020@gmail.com	ali.shalaby@tempo.fit	1117363639	N/A	Muslim	Male		Maadi	
+Asmaa Gamal			Noury		MX T1			W4		3/7/2022	Inactive	asmaabatran5@gmail.com	asmaa.gamal@tempo.fit	1011272401	October	Muslim	Male		Hadaq Al Ahram	
+Mohamed Reda			Noury		MX T1			W4		3/7/2022	Inactive	moh.redamadian78@gmail.com	mohamed.reda@tempo.fit	1203267777	N/A	Muslim	Male		Maadi	Tuesday, March 22, 2022	
+Muhammad Maher	485		Noury		MX T1			W4		3/7/2022	Inactive	mohamed.maher.eisa20@gmail.com	muhammad.maher@tempo.fit	1007439276	Madinat Nasr	Muslim	Male	Undergraduated	Nasr City	4/4/2022		Failed QA Certification	H-FX016902	Egyptian
+Sadeq Sayed	479		Noury		MX T1			W4		3/7/2022	Inactive	tom.anderson.hs@gmail.com	sadeq@tempo.fit	1148169960	Tagamu3	Muslim	Male	Undergraduated	Mokatam	3/31/2022		Poor Performance Adherence Issue	H-FX016858	Forigner
+Yousef Ibrahim	483		Noury		MX T1			W4		3/7/2022	Inactive	yousefpk30@gmail.com	yousef.ibrahim@tempo.fit	1008246844	Salam Masr el gededa	Muslim	Male	Undergraduated	Gasr el Sawas	4/4/2022		Failed QA Certification	H-FX016881	Egyptian
+Ziad Elmoudir	482		Noury		MX T1			W4		3/7/2022	Inactive	ziad.elmoudir@gmail.com	ziad@tempo.fit	1117780739	Faisal	Muslim	Male	Graduated	Maadi	3/31/2022		Poor Performance Adherence Issue	H-FX016906	Egyptian
+Tony John			Noury		MX T1			W4		3/9/2022	Inactive	kroozzbayern8@gmail.com	tony@tempo.fit	1151607826	N/A	Christian	Male		Maadi	
+Youssef Sherif			Noury		MX T1			W4		3/9/2022	Inactive	youssefsherif911@gmail.com	youssef.sherif@tempo.fit	1026562442	October	Muslim	Male		Shekh Zayed	
+Toka Elsafy	215		Shahenda Ahmed		MX T1			W2	36163	6/21/2021	Inactive	Tokasafy1998@gmail.com	tokaelsafy@tempo.fit	1007442977	N/A	Muslim	Female	Undergraduated	shoubra	10/31/2021	10/31/2021		H-FX016932	Egyptian
+Ahmed Ashraf Darwish	199		Shahenda Ahmed	Mouaiad	MX T1	Phone		W2	24-Jan-93	6/21/2021	Inactive	tysonahmed71@yahoo.com	ahmed.darwish@tempo.fit	1001182207	R4	Muslim	Male	Graduated	New Cairo	3/31/2022		NSNC Absenteeism 3 consecutive absent days	H-FW021945	Egyptian
+Ahmed Shaltot	232		Shahenda Ahmed	N/A	MX T1			W2	34838	6/21/2021	Inactive	ahmdshaltot.as@gmail.com	ahmedshaltot@tempo.fit	1021031888	R6	Muslim	Male	Graduated	shrouk city	12/5/2021	12/5/2021	Failed PSP	H-FX016858	Egyptian
+Andrew Khalil	226		Shahenda Ahmed	N/A	MX T1			W2	37214	6/21/2021	Inactive	akhalil01@outlook.com	andrew.khalil@tempo.fit	1033714741	R2	Christian	Male	Undergraduated	Haram	11/11/2021	11/11/2021	College	H-FX016875	Egyptian
+Martin Coetzee	251		Shahenda Ahmed	Amin	MX T1			W2	30300	6/21/2021	Inactive	mertin.coetzee@gmail.com	martin.c@tempo.fit	84900000000	R6	Christian	Male	Graduated	zatoon	1/31/2022		Teavelling	H-FX016908	Forigner
+Fardous Samy			Training		MX T1			W3	35619	11/15/2021	Inactive	fardoussamy@gmail.com		1097154505	N/A	Muslim	Female	Graduated	Ainshams	11/15/2021	11/15/2021	No Show No Call First day training	
+Mahitab Mesbah			Training		MX T1			W3	29619	11/15/2021	Inactive	mahemahe2281@gmail.com	mahitab.mesbah@tempo.fit	1098081155	R4	N/A	Female	Graduated	Nasr City	12/1/2021	12/1/2021	Logged out during shift, Couldn't Handle work stress	H-FX016918	Egyptian
+Nouf Salaheldin			Training		MX T1			W3	37110	11/15/2021	Inactive	neval.k.19@gmail.com		1002436796	R2	Muslim	Female	Graduated	Giza	11/18/2021	11/18/2021	Transportation Not door to door	
+Salsabeel Nawwar			Training		MX T1			W3	33945	11/15/2021	Inactive	Salsolla.nawwar@windowslive.com		1275082024	R6	Muslim	Female	Graduated	Shorouq City	11/17/2021	11/17/2021	Transportation Collection point was far Away	
+Abdulrahman Idris	468		Training		MX T1			W3	35487	11/15/2021	Inactive	dxmi_xu@hotmail.com	abdulrahman.idris@tempo.fit	1014413520	R2	Muslim	Male	Undergraduated	Al Haram	12/8/2021	12/8/2021	Family Situation \ Commitment Issue	H-FX016924	Forigner
+Hassan el sayed			Training		MX T1			W3	33155	11/15/2021	Inactive	hekhallaf@admincraft.net		1552222656	R6	Muslim	Male	Graduated	Al Rehab	11/19/2021	11/19/2021	Suspected Covid - Unable to continue	
+Ahmed Zahran	487		Nancy Elsharony		Operation Manager	Operation Manager					Inactive					Muslim	Male			7/15/2022		Not meeting job requirement, Failed probation	
+Mouaiad Shaarawy	176	2508	Mohamed Amin		QA	QA	Quality Assurance associate	W1	34837	4/5/2021	Inactive	moe.shaarawy@gmail.com	moshaarawy@tempo.fit	1011501301	Madinat Nasr	Muslim	Male	Undergraduated	Nasr City	12/30/2022		End Of Contract	H-FX016927	Egyptian
+Adham Riad	178	2516	Mohamed Amin		QA	QA	Quality Assurance associate	W1		4/5/2021	Inactive	riadadham2@gmail.com	adham.riad@tempo.fit	1010000000	Tagamu3	Muslim	Male	N/A	Tagamoaa 3	10/3/2022		Violating the Code of conduct	H-FX016859	Egyptian
+Bettina Porkert	182		Mohamed Amin		QA			W1		4/5/2021	Inactive	bettina.porkert@gmail.com	bettina.porkert@tempo.fit	4.92E+11	N/A	N/A	N/A	N/A	New Cairo	8/28/2021	8/28/2021	
+May Sharaf	231		Mohamed Amin		QA			W2	33942	6/21/2021	Inactive	mayaly41292@gmail.com	maysharaf@tempo.fit	1026650632	R6	muslim	Female	Graduated	Madinaty	11/11/2021	11/11/2021	
+Omnia Ibrahim	220		Mohamed Amin		QA			W2	44504	6/21/2021	Inactive	omnia.ibrahim041190@gmail.com	omnia.ibrahim@tempo.fit	1030000000	R6	muslim	Female	Graduated	Heliopolis	12/21/2021	12/21/2021	Personal Reasons	H-FX016909	Egyptian
+Muhammad Nagy	359		Mohamed Amin		QA	QA		W2	35082	7/4/2021	Inactive	muh.nagy@gmail.com	m.nagy@tempo.fit	1066707446	N/A	Muslim	Male	Undergraduated		6/17/2022		Better offer	H-FX016856	Egyptian
+Sondos Hossam	400		Mohamed Amin		QA			W2	36668	8/30/2021	Inactive	sondoshossam082@gmail.com	sondos@tempo.fit	1144348401	R4	Muslim	Female	Undergraduated	Madinet Nasr	10/22/2021	10/22/2021	
+Mohamed Sayed	478	2599	Mohamed Amin		QA	QA	Quality Assurance associate	W4		3/7/2022	Inactive	m7mdsayed15@gmail.com	mohamed.sayed@tempo.fit	1112198439	Faisal	Muslim	Male	Undergraduated	Maadi	3/3/2023		Resignation 	H-FX016877	Egyptian
+Maha Sherif Nassar	696		Erin Fife		Senior talent acquisition	Recruitment	Senior talent acquisition		6-Jan-89	19/9/2022	Inactive	mahanassar89@gmail.com	maha.nassar@tempo.fit	1005719937	N/A	Muslim	Female	Graduated	1st settelement		8AC50341	Egyptian
+Abdelrahman Muhammed hassan			Mahmoud El Abnoudy		T1 associate	MX		W9		1/2/2023	Inactive	shebbomuhammed@gmail.com	abdelrahman.hassan@tempo.fit	1004070160					5th settelement-kobry el rehab	1/16/2023	Not recommended to rejoin	Adherence issue	
+Osama Elmorsy			Mahmoud El Abnoudy		T1 associate	MX		W9		1/2/2023	Inactive	osama.elmorsy@outlook.com		1025383415					Mohandessen			NSNC from first day training	
+Aya Karam			Mahmoud El Abnoudy		T1 associate	MX		W9		1/2/2023	Inactive	ayak6762@gmail.com		"01097987247 - whatsapp\n01120674791\n"					Shubra-dwran shubra			NSNC from first day training	
+ADAM AL BASIRI			Mahmoud El Abnoudy		T1 associate	MX		W9		1/2/2023	Inactive	Adamalbasiri0@gmail.com		1005833860					El obour	1/3/2023		Didn't meet the Company's Profile/Language issues	
+Jackson Junior			Mahmoud El Abnoudy		T1 associate	MX		W9		1/2/2023	Inactive	jacksonjonas525@gmail.com		2.01008E+11					Maadi-degla			NSNC from first day training	
+Adham Shedid			Mahmoud El Abnoudy		T1 associate	MX		W9		1/2/2023	Inactive	adhamwrld@gmail.com		1102277222					Rehab city			NSNC from first day training	
+Mohamed SaadAllah Mohamed Morsy			Mahmoud El Abnoudy		T1 associate	MX		W9		1/2/2023	Inactive			1283471114					Masr el gedida- el nozha	1/3/2023		Didn't meet the Company's Profile/Language issues	
+Steven martin			Mahmoud El Abnoudy		T1 associate	MX		W9		1/2/2023	Inactive	kalvinscott33@gmail.com		1156252057/					Hadayek el zeiton			NSNC from first day training	
+Noureldin galal rashed			Mahmoud El Abnoudy		T1 associate	MX		W9		1/2/2023	Inactive	noureldinrashed16@gmail.com		1289924337					Maadi/laselki			NSNC from first day training	
+Ghenwa Essam Saad El Said	767		Mahmoud El Abnoudy		T1 associate		MX Associate-L1- new hire	W10		2/6/2023	Inactive	Ghenwaessam1999@gmail.com	ghenwa.essam@tempo.fit	1557119117/01012508987			Female		Matarya			H-FX016915	Egyptian
+Mohamed Hosny			Mahmoud El Abnoudy		T1 associate		MX Associate-L1- new hire	W10		2/6/2023	Inactive	hager.meta199@gmail.com	hager.magdy@tempo.fit	1030262696			Female		Nasr city	
+Ahmed Amin Hassanin			Mahmoud El Abnoudy		T1 associate		MX Associate-L1- new hire	W10		2/6/2023	Inactive	lobnamohammed776654@gmail.com	lobna.mohamed@tempo.fit	1094504145			Female		Mokattam	
+Noureldin galal rashed			Mahmoud El Abnoudy		T1 associate		MX Associate-L1- new hire	W10		2/6/2023	Inactive	noureldinrashed16@gmail.com	nour.rashed@tempo.fit	1289924337			Male		Nasr city			H-FW022018	Forigner
+Hisham Emam			Mahmoud El Abnoudy		T1 associate		MX Associate-L1- new hire	W10		2/6/2023	Inactive	Hishamemam66@hotmail.com	hisham.emam@tempo.fit	1003979075			Male		Zaiton	
+Hager Magdy			Mahmoud El Abnoudy		T1 associate		MX Associate-L1- new hire	W10		2/6/2023	Inactive	ayman.medhat.993@gmail.com	ayman.medhat@tempo.fit	1507124650			Male		Nasr City	
+Ayman Medhat			Mahmoud El Abnoudy		T1 associate		MX Associate-L1- new hire	W10		2/6/2023	Inactive	amin41551@gmail.com	ahmed.amin@tempo.fit	1145424325			Male		Masr el gedida	
+Lobna mohamed Sayed			Mahmoud El Abnoudy		T1 associate		MX Associate-L1- new hire	W10		2/6/2023	Inactive	mohamed.hosnyb30@gmail.com	mohamed.hosny@tempo.fit	1063801935			Male		Haram	
+Abdullah Hussien Nasser	783	2733	Mahmoud El Abnoudy		T1 associate			W11		3/13/2023	Inactive	horrorfight1992@gmail.com	abdullah.nasser@tempo.fit	2.01118E+11	Giza	
+Esraa Kamal Ibrahim	788	2738	Mahmoud El Abnoudy		T1 associate			W11		3/13/2023	Inactive	esraa.k2013@gmail.com	esraa.kamal@tempo.fit	2.01117E+11	Faisal	
+Islam Adel	790	2740	Mahmoud El Abnoudy		T1 associate			W11		3/13/2023	Inactive	islamadelrafat1993@gmail.com	islam.adel@tempo.fit	20122940417/01122940417	Maadi	
+Momen galal	794	2744	Mahmoud El Abnoudy		T1 associate			W11		3/13/2023	Inactive	momen.galal@gmail.com	momen.galal@tempo.fit	2.01007E+11	Masr el gedida	
+Mohamed khaled			Mahmoud El Abnoudy		T1 associate			W11		3/13/2023	Inactive			1127027336	Haram	3/13/2023		NSNC from first day training	
+Assem Adel			Mahmoud El Abnoudy		T1 associate			W11		3/13/2023	Inactive			2.01145E+11	Rehab	3/13/2023		NSNC from first day training	
+Ibrahim Buat (Travis)			Mahmoud El Abnoudy		T1 associate			W11		3/13/2023	Inactive			1122456458	Maadi	3/13/2023		NSNC from first day training	
+Sarah Muhammad			Mahmoud El Abnoudy		T1 associate			W11		3/13/2023	Inactive			1007049500	New Maadi	3/13/2023		NSNC from first day training	
+Mahmoud Bahaa			Mahmoud El Abnoudy		T1 associate			W11		3/13/2023	Inactive			2.01116E+11	Maadi	3/13/2023		NSNC from first day training	
+Ahmed Saleh Muhammed Abd El-Fattah			Mahmoud El Abnoudy		T1 associate			W11		3/13/2023	Inactive			1557119117/01012508987	Matarya	3/13/2023		Attended first day training	
+Hisham Emam			Mahmoud El Abnoudy		T1 associate			W11		3/13/2023	Inactive			1003979075	Helmyt el zaiton	3/13/2023		Attended first day training	
+Amr Youssef			Mahmoud El Abnoudy		T1 associate			W11		3/13/2023	Inactive			2.01001E+11	Gesr el swes	3/13/2023		Attended first day training	
+Ahmed Amin			Mahmoud El Abnoudy		T1 associate			W11		3/13/2023	Inactive			1145424325	Masr el gedida	3/16/2023	
+Abdelrahman Seif			Mahmoud El Abnoudy		T1 associate			W11		3/13/2023	Inactive			2.01096E+11	Maadi	3/15/2023	
+Youssef Mohamed	457	2594	Mustafa Awadallah	Heba El Sobky	T1 associate	Phone	MX Associate-L1	W3	11-Jul-99	11/15/2021	Inactive	youssefmohamed1179@gmail.com	youssef.mohamed@tempo.fit	1126832126	N/A	Muslim	Male	Undergraduated	Zahra el Maadi	1/29/2023		Personal Reason	H-FX016906	Egyptian
+Aminu Ellams	503	2632	Mustafa Awadallah	Heba El Sobky	T1 associate	Phone	MX Associate-L1- new hire	W6		6/27/2022	Inactive	aellams24@gmail.com	aminu.ellams@tempo.fit	1067005753	N/A	Muslim	Male			6/14/2023			H-FW021946	Forigner
+Sherif Abdel Hakim	188	2524	Ahmed Diab		T2/Cancellation	T2/Cancellation	T2/Cancellation	W1		4/5/2021	Inactive	sherif.mohamed9021@gmail.com	sherif.mohamed@tempo.fit	1070000000	N/A	Muslim	Male	N/A	Zahraa Maadi	11/24/2022	Not recommended	Performance issue	H-FX016862	Egyptian
+Sultan Idris	189		Ahmed Diab	Mariam	T2/Cancellation	T2/Cancellation		W1	36020	4/5/2021	Inactive	sultan_idris80@yahoo.com	sultan.idris@tempo.fit	1141233959	R2	Muslim	Male	Undergraduated	Rehab	5/10/2021	
+Bassma mohsen mostafa mostafa	786	2736	Ahmed Hamed		T2/Cancellation	T2/Cancellation	T2/Cancellation	W11		3/13/2023	Inactive	bassmamohsen1@gmail.com	bassma.mohsen@tempo.fit	2.01149E+11	Hadayek Al Ahram					6/7/2023	
+Yusuf Ashraf	228		Khaled El Sabban	Nagy	T2/Cancellation			W2	35900	6/21/2021	Inactive	yusufashrafyusuf2@gmail.com	yusuf.peter@tempo.fit	1092251888	R6	Muslim	Male	Undergraduated	Dar Misr Koronfel	Wednesday, February 2, 2022	Not Recommended 	Attitude	H-EW011906	Egyptian
+Mohamed Hazem	185		Youssef		T2/Cancellation			W1		4/5/2021	Inactive	muhamed.hazem95@gmail.com	moh.hazem@tempo.fit	1120211709	N/A	N/A	N/A	N/A	Nasr City	8/11/2021	8/11/2021	
+Sherif Abdel Salam	204		Gendy		T2/Tech			W2		6/21/2021	Inactive	dr.sherif.kenawy@gmail.com	sherifkenawy@tempo.fit		R4	N/A	N/A	N/A	new cairo	6/28/2021	6/28/2021	Personal Reason	
+Ali Tantawy	210		Hitham		T2/Tech			W2		6/21/2021	Inactive	ali-tantawy@outlook.com	alitantawy@tempo.fit	1143934523	N/A	N/A	N/A	N/A	baab el shaarya	7/21/2021	7/21/2021	Failed certification	
+Loay Nasr	207		Hitham		T2/Tech			W2		6/21/2021	Inactive	loay.nasr2210@gmail.com	loay.nasr@tempo.fit	1123262720	R1	N/A	N/A	N/A	Zayed	7/20/2021	7/20/2021	Failed certification	
+Mostafa Gaballa	238		Hitham	Mouaiad	T2/Tech			W2		6/21/2021	Inactive	azzay0107@gmail.com	m.gaballa@tempo.fit	1126176713	R2	N/A	N/A	N/A	Faisal	7/8/2021	7/8/2021	Consecutive no shows	
+Mahmoud Allam	239		Mahmoud		T2/Tech			W2		6/22/2021	Inactive	MMAALLAM@GMAIL.COM	m.allam@tempo.fit	1003404106	R2	N/A	N/A	N/A	HADAYEK EL AHRAM	7/27/2021	7/27/2021		H-FX016901	Egyptian
+Abdul Aziz Abdallah	179		Shoukry Boules	Nagy	T2/Tech	T2/Tech		W1		4/5/2021	Inactive	saudi1022it@gmail.com	abdulazizabdallah@tempo.fit	1156090317	R2	Muslim	Male	N/A	Faisal	6/26/2022		Migration	H-FX016913	Forigner
+Omar Saeed	211		Shoukry Boules	Mouaiad	T2/Tech	T2/Tech		W2		6/21/2021	Inactive	omarhaliim2@gmail.com	omar.saeed@tempo.fit	1018034654	Tagamu3	Muslim	Male	N/A	5th settelment	8/8/2022		Code of Conduct	H-FX016860	Egyptian
+Ahmed Diab	175	2517	Khaled El Sabban		Team Lead	Team Lead	Team Lead	W1	4-Mar-97	4/5/2021	Inactive	Ahmed_diab7@icloud.com	Ahmed.diab@tempo.fit	1050004643	Faisal	Muslim	Male	Undergraduated	Faisal	6/9/2023	
+Kareem Abdel Nasser	217	2566	Khaled El Sabban		Team Lead	Fitness Concierge	Senior FC Associate	W2	31-Aug-21	6/21/2021	Inactive	kareem.nasser990@gmail.com	kareem.nasser@tempo.fit	1155596335	Salam/Masr El Gedida	Muslim	Male	Graduated	Heliopolis	2/28/2023	Resignation	Resignation	H-FX016915	Egyptian
+Shahenda Ahmed	235	2577	Khaled El Sabban		Team Lead	Team Lead	Team Lead	W2		6/25/2021	Inactive	shahenda.ahmed66@yahoo.com	shahenda@tempo.fit	1222579695	October-Zayed	Muslim	Female	N/A	Mokkatam	10/4/2022	Violating Company Code of Conduct.	Violating Company Code of Conduct.	H-FX016869	Egyptian
+Ahmed Elgendy	170		Salma Ramadan		Team Lead			W1	44500	4/5/2021	Inactive	ahmed-hamdy-elgendy@hotmail.com	gendy@tempo.fit	01100573206/01021291455	N/A	Muslim	Male	Graduated	Hadaik Elqobba	
+Youssef El Sherif	184		Salma Ramadan		Team Lead			W1		4/5/2021	Inactive	youssefalielsherif@gmail.com	youssefelsherif@tempo.fit	1019191278	R5	N/A	N/A	N/A	Nasr City	8/23/2021	8/23/2021	
+Haitham Salem	213		Salma Ramadan		Team Lead			W2	30959	6/21/2021	Inactive	haithem990@gmail.com	haitham.salem@tempo.fit	1006443078	R3	Muslim	Male	Graduated	Zahraa El Maadi	10/31/2021	10/31/2021	
+Jomari Smith			Salma Ramadan		Team Lead			W2		8/31/2021	Inactive	jomari.smith@gmail.com	jomari@tempo.fit	1002974549	N/A	N/A	N/A	N/A	Tagamo3 El Khames	10/20/2021	10/20/2021		H-FX016918	Forigner
+Ahmed Fathallah	190	2514	Mohamed Halim		Tools Owner	Tools Owner	Tools Owner	W1		4/5/2021	Inactive	ahmedfathallah89@gmail.com	ahmad.fathallah@tempo.fit	1551705338	Madinat Nasr	Muslim	Male	N/A	Nasr City	5/4/2023	
+Jerry James	573	573	Aya Ayman		Trainee - Batch 8	MX		W8		11/21/2022	Inactive	jerryfaulino@gmail.com	jerry.james@tempo.fit	1104470897					Ain shams	12/19/2022	Failed Certification	
+Ahmed Mohamed Hamed	569	569	Aya Ayman		Trainee - Batch 8	MX		W8		11/21/2022	Inactive	ahmedmohamed@gmail.com	ahmed.mohamed@tempo.fit	1090573985					El haram	12/19/2022	Failed Certification	
+Asmaa abd alsalam	552	552	Aya Ayman		Trainee - Batch 8	MX		W8		11/21/2022	Inactive	asmaaalberrawy22@gmail.com	asmaa.abdelsalam@tempo.fit	1202670410					Maadi	12/16/2022		Failed Certification	
+Mohammed Nour	565	565	Aya Ayman		Trainee - Batch 8	MX		W8		11/21/2022	Inactive	"nourxox@icloud.com\nnour6nana@gmail.com"	mohammed.nour@tempo.fit	1148820341					Nasr city	12/16/2022		Failed Certification	
+Natasha Chipili	562	562	Aya Ayman		Trainee - Batch 8	MX		W8		11/21/2022	Inactive	"chipilinatasha3@gmail.com\nnatasharenah03@gmail.com,"	natasha.chipili@tempo.fit	1061838927					Cairo university - students residency	12/16/2022		Failed Certification	
+Noor Eldin Sarhan	566	566	Aya Ayman		Trainee - Batch 8	MX		W8		11/21/2022	Inactive	noureldinsarhan1998@gmail.com	nooreldin.sarhan@tempo.fit	1279996814/ +971562753717					Dokki	12/19/2022	Failed Certification	Failed Certification	
+Victoria Mukenge Bantu			Aya Ayman		Trainee - Batch 8	MX		W8		11/21/2022	Inactive	victoria.jeanpie@gmail.com	victoria.mukenge@tempo.fit	1150559067					Becho American city, zahraa el maadi	12/1/2022		Under the legal age and will bring a birth certificate	
+Khadija mansour Muhammad			Aya Ayman		Trainee - Batch 8	MX		W8		11/21/2022	Inactive	Khadija.mansour73@gmail.com		1024311642					Masr el gedida	11/22/2022	Not Recommended	Commitment issue	
+Solomon Jay			Aya Ayman		Trainee - Batch 8	MX		W8		11/21/2022	Inactive	solomonssj03@gmail.com		1147299552					Matarya	11/22/2022	Not Recommended	Didn't meet the Company's Profile	
+Muhammad Ragab Abd El-Kareem			Aya Ayman		Trainee - Batch 8	MX		W8		11/21/2022	Inactive	mragab.zeyada@gmail.com		1148291640					Dar elsalam	11/22/2022	N/A	Didn't meet the Company's Profile	
+Rubin Delaure Nougoue			Aya Ayman		Trainee - Batch 8	MX		W8		11/21/2022	Inactive	nougouerubin@gmail.com		1555681630					Maadi	11/21/2022		NSNC from first day training	
+kameni ides			Aya Ayman		Trainee - Batch 8	MX		W8		11/21/2022	Inactive	kameniidesantoine@yahoo.fr		1281554144					Faisal	11/21/2022		NSNC from first day training	
+Maureen Magangi			Aya Ayman		Trainee - Batch 8	MX		W8		11/21/2022	Inactive	junga.maureen@gmail.com		1550821413					Maadi	11/22/2022		Didn't meet the Company's Profile	
+Alaa eldin			Aya Ayman		Trainee - Batch 8	MX		W8		11/21/2022	Inactive	eldeenalaa22@gmail.com		1010074935					NA	11/21/2022		NSNC from first day training	
+Mennatullah Ayman			Aya Ayman		Trainee - Batch 8	MX		W8		11/21/2022	Inactive	eng.mennaa.ayman@gmail.com		1007967877					Maadi	11/21/2022		NSNC from first day training	
+Keryl Muhonja Busula			Aya Ayman		Trainee - Batch 8	MX		W8		11/21/2022	Inactive	muhonjakeryl@gmail.com		2.01013E+11					NA	11/21/2022		NSNC from first day training	
+Abdelhafiez Mohammed			Aya Ayman		Trainee - Batch 8	MX		W8		11/21/2022	Inactive	aabdelhafiez@aol.com		2.01093E+11					NA	11/21/2022		NSNC from first day training	
+Mariam Ahmed Hany	557	557	Aya Ayman		Trainee - Batch 8	MX		W8		11/23/2022	Inactive	mariamahmed125.ma47@gmail.com	mariam.ahmed@tempo.fit	1061955095					Nasr City	11/25/2022	
+Abdulmajeed Allan			Aya Ayman		Trainee - Batch 8	MX		W8		11/23/2022	Inactive	allan.chikukula@gmail.com		1557980920					masaken al kanady, street 12 , Maadi	11/25/2022	N/A	Didn't meet the Company's Profile	
+Aya Ayman	221	2539	Menna Yasser		Trainer	Trainer	Trainer	W2	35288	6/21/2021	Inactive	ayoyaauman@gmail.com	aya.ayman@tempo.fit	1067286328	Madinat Nasr	Muslim	Female	Graduated	nasr city	1/9/2023	Recommended	Personal Reason	H-FW021923	Egyptian
+Ahmed El Noury	169		Nancy Elsharony		Trainer	Trainer		W1		4/1/2021	Inactive	a.elnoury@gmail.com	ahmednoury@tempo.fit	1009888098	N/A	Muslim	Male	N/A	Downtown		Not Received	Forigner
+Mariam El Gohary	192	2575	Nancy Elsharony		Trainer	Trainer	Trainer	W2	36065	6/16/2021	Inactive	mariamelgohary52@gmail.com	mariamelgohary@tempo.fit	106315799	October-Zayed	Muslim	Female	Undergraduated	October	8/31/2022		Got another job offer	H-FX016896	Egyptian
+Heba Fathy Abdelmawla		745	Mahmoud El Abnoudy		Training	MX		W9		1/2/2023	Inactive	heba.fathy.moussa.92@gmail.com	heba.fathy@tempo.fit	1102778406	Helwan		Female		Helwan	1/27/2023		Failed certification	
+Heba El Marsafy		744	Mahmoud El Abnoudy		Training	MX		W9		1/2/2023	Inactive	hebamarsafy@gmail.com	heba.elmarsafy@tempo.fit	1113005882	N/A		Female		Abdeen- down town	1/27/2023		Failed certification	
+Roya Atef		743	Mahmoud El Abnoudy		Training	MX		W9		1/2/2023	Inactive	royaatef@gmail.com	roya.atef@tempo.fit	1125942732	Helwan		Female		Helwan	1/27/2023		Failed certification	
+Flora Kon	748		Mahmoud El Abnoudy		Training		MX Associate-L1- new hire	W10		2/6/2023	Inactive	florakon123@gmail.com	flora.kon@tempo.fit	01027996576 / 01093606410			Female		New Maadi	3/4/2023		Failed Certification	H-FW021905	Forigner
+Nancy Mohamed	758		Mahmoud El Abnoudy		Training		MX Associate-L1- new hire	W10		2/6/2023	Inactive	nancymohamed.elsebaei@gmail.com	nancy.mohamed@tempo.fit	1019803141			Female		Maadi	3/2/2023		Better offer	H-FX016930	Egyptian
+Andrew Samir	751		Mahmoud El Abnoudy		Training		MX Associate-L1- new hire	W10		2/6/2023	Inactive	andrewsamir781@gmail.com	andrew.samir@tempo.fit	1222436385			Male		Shoubra masr	3/6/2023		Failed Certification 	H-FX016862	Egyptian
+Anas Saeed Ahmed	753		Mahmoud El Abnoudy		Training		MX Associate-L1- new hire	W10		2/6/2023	Inactive	anassaeed769@gmail.com	anas.saeed@tempo.fit	1551420739			Male		Agouza	3/6/2023		Failed Certification 	H-FW021902	Anas
+Harriet Osemuyimen Ebojere	775		Mahmoud El Abnoudy		Training		MX Associate-L1- new hire	W10		2/6/2023	Inactive	ebojereharriet01@gmail.com	harriet.ebojere@tempo.fit	1211165935			Male		Mokattam	3/6/2023		Failed Certification 	H-FW021923	Forigner
+Rebecca Samuel	749		Mahmoud El Abnoudy		Training		MX Associate-L1- new hire	W10		2/6/2023	Inactive	rebeccasamuel180@icloud.com	rebecca.samuel@tempo.fit	2.01158E+11			Female		Maadi-Courniche	2/20/2023		Location & Transportation	H-FX016906	Forigner
+Ayak Deng	754		Mahmoud El Abnoudy		Training		MX Associate-L1- new hire	W10		2/6/2023	Inactive	ayakm.deng@gmail.com	ayak.deng@tempo.fit	1141915010			Male		Ain shams	2/20/2023		Location & Transportation	H-FW021945	Forigner
+Kamal Osama Mohamed Reda Tolba	762		Mahmoud El Abnoudy		Training		MX Associate-L1- new hire	W10		2/6/2023	Inactive	kamalosama2002@gmail.com	kamal.osama@tempo.fit	1011356670			Male		5th Settlement	2/21/2023		Personal Reason	H-FX016927	Egyptian
+Ahmed Saleh Muhammed Abd El-Fattah	770		Mahmoud El Abnoudy		Training		MX Associate-L1- new hire	W10		2/6/2023	Inactive	ahmad.albordany@gmail.com	ahmed.saleh@tempo.fit	1004186877			Male		Maadi	2/17/2023		Personal Reason	H-FW022007	Egyptian
+Mohamed Khaled	760		Mahmoud El Abnoudy		Training		MX Associate-L1- new hire	W10		2/6/2023	Inactive	ohame700@gmail.com	mohamed.khaled@tempo.fit	1127027336			Male		Haram	2/10/2023		Sickness	H-FX016854	Egyptian
+Sherif Fathy	741	741	Mustafa Awadallah		Training	MX	MX Associate-L1- new hire	W9		1/2/2023	Inactive	sfathy.jr@gmail.com	sherif.fathy@tempo.fit	1220642292	Faisal		Male		Haram-Marioutya	2/7/2023		absence with no sick note	
+Nour Zorba	236		Salma Ramadan		WFM			W2		6/24/2021	Inactive	nour.elzorba@gmail.com	nourzorba@tempo.fit		R1	N/A	N/A	N/A	Zayed	7/2/2021	7/2/2021	
+Youssab Yousry	254	2579	Mohamed Halim		Workforce Analyst	Workforce Analyst	WFA	W2	35927	7/7/2021	Inactive	youssabyousrysaad@gmail.com	youssab@tempo.fit	1012994041	October-Zayed	Christian	Male	N/A		12/5/2022		Resignation	To be added by tomorrow	Egyptian`;
+
+
+        // --- HIERARCHY CONFIGURATION (STRICT ORDER) ---
+        const TITLE_HIERARCHY = [
+          "Site Director",
+          "HR Manager",
+          "Operation Manager",
+          "Workforce Manager",
+          "Change Integration Manager",
+          "Training & Development Manager",
+          "QA Lead",
+          "Workforce Analyst",
+          "QA",
+          "T2/Mentor",
+          "T2/Cancellation",
+          "T2/Tech",
+          "Social Media",
+          "MX T1"
+        ];
+
+        // --- INITIAL DATA (Fallback) ---
+        const INITIAL_DATA = [];
+        
+        // --- CSV PARSING HELPER (REUSABLE) ---
+        const parseCSV = (csvText) => {
+            // FIX: Using tab separator since the data was pasted with tabs
+            const SEPARATOR = /\t/;
+            
+            const rows = csvText.trim().split('\n');
+            if (rows.length < 2) return [];
+
+            const parsedData = rows.slice(1).map((line, index) => {
+                // Split using the tab separator
+                const v = line.split(SEPARATOR).map(val => val.trim().replace(/^"|"$/g, ''));
+                
+                // Assuming 25 columns based on the header provided (including duplicates/blanks)
+                if (v.length < 25) {
+                   console.error(`Skipping row ${index + 2} due to incomplete data (expected 25 columns, found ${v.length}):`, v);
+                   return null;
+                }
+                
+                let channel = v[6] || "Unassigned";
+                // Adjusting the parsing logic based on the user's provided structure (which uses 
+                // Team Lead, Position, Channel, Title, etc.) and relying on the column indices.
+
+                // Index reference based on user's header (assuming zero-indexed):
+                // 0: Name, 1: ID, 3: Team Lead, 4: QA [Assigned], 5: Position, 6: Channel, 7: Title, 11: Status, 19: Area
+                
+                // Clean up phone number field (Index 14)
+                const phoneNumber = (v[14] || "").replace(/[^0-9+\s]/g, '').replace(/\s/g, '');
+
+
+                let title = v[7] || "";
+                if (title === "Team Lead / Change Integration Manager") title = "Change Integration Manager";
+                if (title.toLowerCase().includes("opration manger")) title = "Operation Manager";
+                if (title.toLowerCase().includes("workfroce manager")) title = "Workforce Manager";
+                if (title.toLowerCase().includes("change integration manger")) title = "Change Integration Manager";
+                if (title.toLowerCase().includes("training and development manager")) title = "Training & Development Manager";
+                if (title.toLowerCase().includes("mx associate-l1")) title = "MX T1";
+                if (title.toLowerCase().includes("mx associate-l1- new hire")) title = "MX T1";
+                if (title.toLowerCase().includes("qa")) title = "QA";
+                if (title.toLowerCase().includes("team lead")) title = "Team Lead";
+                if (title.toLowerCase().includes("t2")) title = "T2/Cancellation";
+                
+                // --- NOTE: Changed Index 4 for QA Assigned and Index 19 for Area ---
+                // The structure of the previous file and the pasted data uses different columns.
+                // We map them based on the structure provided in the last query.
+
+                return {
+                    name: v[0] || "Unknown",
+                    id: v[1] || `sheet-${index + 1}`,
+                    hr_id: v[2] || "",
+                    team_lead: v[3] || "Unassigned", // Team Lead
+                    qa_assigned: v[4] || "",       // QA Assigned
+                    position: v[5] || "",          // Position
+                    channel: v[6] || "MX T1",      // Channel (LOB)
+                    sub_channel: v[5],             // Use Position as sub-channel for richer data
+                    title: title,                  // Standardized Title
+                    wave: v[8] || "",
+                    dob: v[9] || "",
+                    joining_date: v[10] || "",
+                    status: v[11] || "Unknown", 
+                    personal_email: v[12] || "",
+                    tempo_email: v[13] || "",
+                    phone: phoneNumber,
+                    route: v[15] || "",
+                    religion: v[16] || "",
+                    gender: v[17] || "",
+                    education: v[18] || "",
+                    area: v[19] || "",             // Area
+                    end_date: v[20] || "",         // End Date
+                    rehire_status: v[21] || "",    // Rehire Status
+                    reason: v[22] || "",           // Reason
+                    headset_sn: v[23] || "",       // Headset SN
+                    nationality: v[24] || ""       // Nationality
+                };
+            }).filter(item => item !== null && item.id.trim() !== '');
+            return parsedData;
+        };
+
+        // --- COMPONENTS ---
+
+        const StatusBadge = ({ status }) => {
+          const normalizedStatus = status ? status.toLowerCase().trim() : '';
+          let style = "bg-gray-100 text-gray-500 border-gray-200 dark:bg-slate-700 dark:text-slate-400 dark:border-slate-600";
+          
+          if (normalizedStatus.includes('active')) {
+            // FIX: Corrected missing closing quote and truncated class name
+            style = "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800";
+          } else if (normalizedStatus.includes('leave')) {
+            style = "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800";
+          } else if (normalizedStatus.includes('terminated') || normalizedStatus.includes('resigned')) {
+            style = "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800";
+          }
+          
+          return (
+            <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${style} capitalize`}>
+              {status || "Unknown"}
+            </span>
+          );
+        };
+
+        // --- HELPER: AVATAR COMPONENT (UPDATED SIZES) ---
+        const UserAvatar = ({ name, photo, size = "md" }) => {
+            const sizeClasses = {
+                sm: "w-10 h-10 text-sm",
+                md: "w-20 h-20 text-3xl", // Increased for Card
+                lg: "w-32 h-32 text-5xl", // Increased for Profile
+                xl: "w-40 h-40 text-6xl"
+            };
+            const containerClass = `rounded-full flex items-center justify-center font-bold border-2 border-white dark:border-slate-700 shadow-md overflow-hidden ${sizeClasses[size]} shrink-0`;
+
+            if (photo && photo.trim() !== "") {
+                return (
+                    <div className={`${containerClass} bg-white dark:bg-slate-800`}>
+                        <img 
+                            src={getDirectImageUrl(photo)} 
+                            alt={name} 
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'flex';
+                            }}
+                        />
+                        <div className="hidden w-full h-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 items-center justify-center">
+                            {name ? name.charAt(0) : '?'}
+                        </div>
+                    </div>
+                );
+            }
+            return (
+                <div className={`${containerClass} bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400`}>
+                    {name ? name.charAt(0) : '?'}
+                </div>
+            );
+        };
+
+        // --- CHART COMPONENT ---
+        const LobChart = ({ data }) => {
+          if (!data || data.length === 0) return null;
+          const max = Math.max(...data.map(d => d.total));
+          
+          return (
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm mb-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
+                <BarChart3 size={20} className="text-blue-600 dark:text-blue-400" />
+                Headcount Distribution by LOB
+              </h3>
+              <div className="flex items-end justify-around gap-2 sm:gap-4 w-full px-2">
+                {data.map((item) => (
+                  <div key={item.name} className="flex flex-col items-center gap-2 group w-full">
+                    <div className="relative w-full h-48 flex justify-center items-end">
+                       <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs font-bold py-1.5 px-2.5 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none mb-2">
+                          {item.total} Employees
+                          <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 rotate-45"></div>
+                       </div>
+                       <div 
+                         className="w-full max-w-[40px] sm:max-w-[60px] bg-blue-500 dark:bg-blue-600 rounded-t-lg transition-all duration-700 ease-out relative hover:brightness-110"
+                         style={{ height: `${Math.max((item.total / max) * 100, 2)}%` }} 
+                       >
+                       </div>
+                    </div>
+                    <div className="text-center w-full mt-1">
+                      <div className="text-sm font-bold text-slate-900 dark:text-white mb-0.5">{item.total}</div>
+                      <div className="text-[10px] sm:text-xs font-medium text-slate-500 dark:text-slate-400 break-words leading-tight w-full px-1">
+                        {item.name}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        };
+
+        // --- HELPERS ---
+        const getDirectImageUrl = (url) => {
+            if (!url) return "";
+            if (url.startsWith('data:image')) return url; 
+            let cleanUrl = url.trim();
+            // Removed specific Google Drive and Dropbox logic.
+            return cleanUrl;
+        };
+
+        const formatDateForInput = (dateString) => {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) return ''; 
+            return date.toISOString().split('T')[0];
+        };
+
+        // --- EDIT FORM COMPONENTS ---
+        const EditInputField = ({ label, name, type = "text", value, onChange }) => {
+            let displayValue = value || '';
+            if (type === 'date' && displayValue) {
+               const formatted = formatDateForInput(displayValue);
+               if (formatted) displayValue = formatted;
+            }
+
+            return (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</label>
+                <input 
+                  type={type} 
+                  name={name} 
+                  value={displayValue} 
+                  onChange={onChange}
+                  className="px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
+                />
+              </div>
+            );
+        };
+
+        const EditSelectField = ({ label, name, value, options, onChange }) => (
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{label}</label>
+              <select 
+                name={name} 
+                value={value || ''} 
+                onChange={onChange}
+                className="px-3 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none text-slate-900 dark:text-slate-100"
+              >
+                <option value="" disabled>Select {label}</option>
+                {options.map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </div>
+        );
+
+        const ProfileField = ({ label, value, icon: Icon, className = "" }) => (
+            <div className={`flex flex-col justify-center gap-0.5 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700 ${className}`}>
+              <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1">
+                {Icon && <Icon size={9} />} {label}
+              </span>
+              <span className="text-xs text-slate-900 dark:text-slate-100 font-semibold truncate leading-tight" title={value}>
+                {value || "-"}
+              </span>
+            </div>
+        );
+
+        // --- UNIFIED EMPLOYEE MODAL ---
+        const EmployeeModal = ({ employee, mode = 'view', onClose, onSave }) => {
+          const [formData, setFormData] = useState({ ...employee });
+          const isEdit = mode === 'edit';
+          const fileInputRef = useRef(null);
+          
+          const isActive = (isEdit ? formData.status : employee.status)?.toLowerCase().includes('active');
+
+          const handleChange = (e) => {
+            const { name, value } = e.target;
+            setFormData(prev => ({ ...prev, [name]: value }));
+          };
+
+          const handleImageUpload = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    setFormData(prev => ({ ...prev, photo: reader.result }));
+                };
+                reader.readAsDataURL(file);
+            }
+          };
+
+          const handleSubmit = (e) => {
+            e.preventDefault();
+            // Simple validation for new employee
+            if (formData.name === "New Employee" && !formData.tempo_email) {
+                console.error("Please enter a name and Tempo Email for the new employee.");
+                return;
+            }
+            onSave(formData);
+          };
+
+          // Helper: Unified field rendering
+          const UnifiedField = ({ label, name, type = "text", value, onChange, isEdit, icon: Icon, options = [] }) => {
+             if (isEdit) {
+                 if (type === 'select') {
+                     return <EditSelectField label={label} name={name} value={value} options={options} onChange={onChange} />;
+                 }
+                 return <EditInputField label={label} name={name} type={type} value={value} onChange={onChange} />;
+             } else {
+                 return <ProfileField label={label} value={value} icon={Icon} />;
+             }
+          };
+
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+              <div className="absolute inset-0" onClick={onClose}></div>
+              <div className="relative bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-5xl border border-slate-200 dark:border-slate-700 flex flex-col my-auto max-h-[90vh]">
+                
+                {/* Header */}
+                <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 rounded-t-xl">
+                   <div className="flex items-center gap-6">
+                      {isEdit ? (
+                          <div className="relative group cursor-pointer shrink-0" onClick={() => fileInputRef.current.click()}>
+                            <UserAvatar name={formData.name} photo={formData.photo} size="lg" />
+                            <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Upload size={32} className="text-white" />
+                            </div>
+                            <input type="file" ref={fileInputRef} className="hidden" onChange={handleImageUpload} accept="image/*" />
+                          </div>
+                      ) : (
+                          <UserAvatar name={formData.name} photo={formData.photo} size="lg" />
+                      )}
+                      <div>
+                          {isEdit ? (
+                              <div className="w-80">
+                                  <UnifiedField label="Full Name" name="name" value={formData.name} onChange={handleChange} isEdit={true} />
+                              </div>
+                          ) : (
+                              <h2 className="text-3xl font-bold text-slate-900 dark:text-white leading-tight mb-2">{formData.name}</h2>
+                          )}
+                          
+                          {!isEdit && (
+                              <div className="flex items-center gap-3 mt-1">
+                                <StatusBadge status={formData.status} />
+                                <span className="text-sm text-slate-500 dark:text-slate-400 font-mono bg-white dark:bg-slate-900 px-2 py-1 rounded border border-slate-200 dark:border-slate-700">
+                                  ID: {formData.id}
+                                </span>
+                              </div>
+                          )}
+                      </div>
+                   </div>
+                   
+                   <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors text-slate-400">
+                    <X size={24} />
+                  </button>
+                </div>
+                
+                <form onSubmit={handleSubmit} className="p-8 overflow-y-auto flex-1">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    
+                    {/* Column 1: Employment */}
+                    <div className="space-y-5">
+                        <h3 className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-widest border-b border-blue-100 dark:border-blue-900/30 pb-2 mb-3">
+                           Employment
+                        </h3>
+                        {isEdit && <UnifiedField label="Employee ID" name="id" value={formData.id} onChange={handleChange} isEdit={true} />}
+                        {isEdit && <UnifiedField label="Photo URL" name="photo" value={formData.photo} onChange={handleChange} isEdit={true} />}
+                        
+                        {isEdit && (
+                            <UnifiedField 
+                                label="Status" 
+                                name="status" 
+                                type="select"
+                                options={["Active", "Leave", "Terminated", "Resigned"]}
+                                value={formData.status} 
+                                onChange={handleChange} 
+                                isEdit={true} 
+                            />
+                        )}
+
+                        <UnifiedField 
+                          label="Title" 
+                          name="title" 
+                          value={formData.title} 
+                          onChange={handleChange} 
+                          isEdit={isEdit} 
+                          icon={Briefcase} 
+                          type={isEdit ? "select" : "text"} 
+                          options={TITLE_HIERARCHY}
+                        />
+                        <UnifiedField label="Supervisor" name="team_lead" value={formData.team_lead} onChange={handleChange} isEdit={isEdit} icon={UserCheck} />
+                        
+                        {isEdit && (
+                            <UnifiedField 
+                                label="Channel (LOB)" 
+                                name="channel" 
+                                value={formData.channel} 
+                                onChange={handleChange} 
+                                isEdit={true} 
+                                icon={Building} 
+                                type="select"
+                                options={["MX T1", "T2/Mentor", "T2/Cancellation", "T2/Tech", "Social Media", "QA", "Workforce Analyst", "QA Lead", "Unassigned"]}
+                            />
+                        )}
+                        {isEdit && <UnifiedField label="Sub-Channel" name="sub_channel" value={formData.sub_channel} onChange={handleChange} isEdit={true} />}
+                        
+                        {(!isActive || isEdit) && <UnifiedField label="Rehire Status" name="rehire_status" value={formData.rehire_status} onChange={handleChange} isEdit={isEdit} icon={Hash} />}
+                    </div>
+
+                    {/* Column 2: Timeline & Contact */}
+                    <div className="space-y-5">
+                        <h3 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest border-b border-indigo-100 dark:border-indigo-900/30 pb-2 mb-3">
+                           Timeline & Contact
+                        </h3>
+                        <div className="grid grid-cols-2 gap-4">
+                           <UnifiedField label="Joined" name="joining_date" type="date" value={formData.joining_date} onChange={handleChange} isEdit={isEdit} icon={Calendar} />
+                           {(!isActive || isEdit) ? <UnifiedField label="End Date" name="end_date" type="date" value={formData.end_date} onChange={handleChange} isEdit={isEdit} icon={Calendar} /> : <div/>}
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <UnifiedField label="Wave" name="wave" value={formData.wave} onChange={handleChange} isEdit={isEdit} icon={Activity} />
+                            <UnifiedField label="Born" name="dob" type="date" value={formData.dob} onChange={handleChange} isEdit={isEdit} icon={Calendar} />
+                        </div>
+
+                        <div className="pt-2"></div>
+                        <UnifiedField label="Tempo Email" name="tempo_email" type="email" value={formData.tempo_email} onChange={handleChange} isEdit={isEdit} icon={Mail} />
+                        <UnifiedField label="Personal Email" name="personal_email" type="email" value={formData.personal_email} onChange={handleChange} isEdit={isEdit} icon={Mail} />
+                    </div>
+
+                    {/* Column 3: Personal & Details */}
+                    <div className="space-y-5">
+                        <h3 className="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-widest border-b border-purple-100 dark:border-purple-900/30 pb-2 mb-3">
+                           Personal & Info
+                        </h3>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <UnifiedField label="Mobile" name="mobile" value={formData.mobile} onChange={handleChange} isEdit={isEdit} icon={Phone} />
+                            <UnifiedField label="Phone" name="phone" value={formData.phone} onChange={handleChange} isEdit={isEdit} icon={Phone} />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <UnifiedField label="Gender" name="gender" value={formData.gender} onChange={handleChange} isEdit={isEdit} icon={User} />
+                            <UnifiedField label="Religion" name="religion" value={formData.religion} onChange={handleChange} isEdit={isEdit} icon={Heart} />
+                        </div>
+                        
+                        <UnifiedField label="Route" name="route" value={formData.route} onChange={handleChange} isEdit={isEdit} icon={Truck} />
+                        <UnifiedField label="Graduate / Undergrad" name="education" value={formData.education} onChange={handleChange} isEdit={isEdit} icon={GraduationCap} />
+                        {isEdit && <UnifiedField label="Area" name="area" value={formData.area} onChange={handleChange} isEdit={true} icon={MapPin} />}
+                    </div>
+
+                  </div>
+                </form>
+
+                <div className="p-6 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex justify-end gap-3 rounded-b-xl">
+                  <button onClick={onClose} className="px-5 py-2.5 text-slate-600 dark:text-slate-300 font-medium hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors">
+                    {isEdit ? 'Cancel' : 'Close'}
+                  </button>
+                  {isEdit && (
+                    <button type="submit" onClick={handleSubmit} className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors flex items-center gap-2 shadow-md hover:shadow-lg transform active:scale-95 duration-150">
+                      <Save size={18} /> {employee.id.startsWith('NEW-') ? 'Create Employee' : 'Save Changes'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        };
+
+        // --- COMPACT CARD WIDGET ---
+        const EmployeeWidget = ({ employee, onClick, onEdit, onDelete }) => {
+          return (
+            <div 
+              onClick={onClick}
+              className="group bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-700 cursor-pointer transition-all duration-200 flex flex-col overflow-hidden relative animate-in fade-in zoom-in-95 h-full transform hover:-translate-y-1"
+            >
+              <div className={`h-1.5 w-full ${
+                employee.channel === 'MX T1' ? 'bg-indigo-500' :
+                employee.channel === 'Engineering' ? 'bg-blue-500' :
+                employee.channel === 'Sales' ? 'bg-green-500' :
+                employee.channel === 'Finance' ? 'bg-purple-500' :
+                'bg-slate-400'
+              }`} />
+
+              <div className="p-4 flex-1">
+                <div className="flex justify-between items-start mb-4">
+                  <UserAvatar name={employee.name} photo={employee.photo} size="md" />
+                  <StatusBadge status={employee.status} />
+                </div>
+
+                <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg truncate mb-1" title={employee.name}>{employee.name}</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1 mb-3 truncate font-medium">
+                  <Briefcase size={14} className="text-slate-400 dark:text-slate-500" /> {employee.title || employee.position}
+                </p>
+                
+                <div className="mt-2 mb-3 text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-700/50 p-2 rounded-lg border border-slate-100 dark:border-slate-600 flex items-center gap-2 w-full">
+                   <UserCheck size={14} className="text-slate-400 dark:text-slate-500 flex-shrink-0"/> 
+                   <div className="flex flex-col min-w-0">
+                       <span className="text-[10px] uppercase font-bold text-slate-400">Supervisor</span>
+                       <span className="truncate font-semibold text-slate-700 dark:text-slate-200">{employee.team_lead}</span>
+                   </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-700 grid grid-cols-2 gap-2 text-xs text-slate-500 dark:text-slate-400">
+                   <div className="flex items-center gap-1.5 truncate" title={employee.sub_channel ? `${employee.channel} - ${employee.sub_channel}` : employee.channel}>
+                      {employee.sub_channel === 'Phone' ? <Phone size={14}/> : 
+                       employee.sub_channel === 'Email' ? <Mail size={14}/> : 
+                       employee.sub_channel?.includes('Chat') ? <MessageCircle size={14}/> :
+                       <Building size={14} />}
+                      <span className="truncate font-medium">
+                        {employee.channel} {employee.sub_channel && <span className="text-slate-400">• {employee.sub_channel}</span>}
+                      </span>
+                   </div>
+                   <div className="flex items-center gap-1.5 truncate">
+                      <MapPin size={14} />
+                      <span className="truncate font-medium">{employee.area}</span>
+                   </div>
+                </div>
+              </div>
+              
+              {/* Action Bar */}
+              <div className="bg-slate-50 dark:bg-slate-900/30 p-3 flex justify-between items-center border-t border-slate-100 dark:border-slate-700">
+                <div className="flex gap-1">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); onEdit(employee); }}
+                      className="p-2 hover:bg-white dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg transition-colors text-slate-400" 
+                      title="Edit"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); onDelete(employee.id); }}
+                      className="p-2 hover:bg-white dark:hover:bg-slate-700 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-colors text-slate-400" 
+                      title="Delete"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                </div>
+                <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1 group-hover:underline">
+                  Full Profile <ChevronRight size={14} />
+                </div>
+              </div>
+            </div>
+          );
+        };
+
+        const EmployeeRow = ({ employee, onClick, onEdit, onDelete }) => (
+          <tr 
+            onClick={onClick}
+            className="hover:bg-blue-50 dark:hover:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700 last:border-0 transition-colors cursor-pointer group"
+          >
+            <td className="px-6 py-4">
+              <div className="flex items-center gap-3">
+                <UserAvatar name={employee.name} photo={employee.photo} size="sm" />
+                <div>
+                  <div className="font-medium text-slate-900 dark:text-slate-100">{employee.name}</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">ID: {employee.id}</div>
+                </div>
+              </div>
+            </td>
+            <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                <div className="font-medium text-slate-700 dark:text-slate-200">{employee.title}</div>
+                <div className="text-xs text-slate-400">{employee.position}</div>
+            </td>
+            <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
+                <div className="flex items-center gap-2">
+                    <UserCheck size={14} className="text-slate-400 dark:text-slate-500"/>
+                    {employee.team_lead}
+                </div>
+            </td>
+            <td className="px-6 py-4">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-600">
+                {employee.channel} {employee.sub_channel && `• ${employee.sub_channel}`}
+              </span>
+            </td>
+            <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
+                {employee.joining_date}
+            </td>
+            <td className="px-6 py-4 flex justify-end gap-2 items-center">
+                <StatusBadge status={employee.status} />
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onEdit(employee); }}
+                  className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-slate-400 hover:text-blue-500"
+                >
+                    <Edit2 size={14} />
+                </button>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onDelete(employee.id); }}
+                  className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded text-slate-400 hover:text-red-500"
+                >
+                    <Trash2 size={14} />
+                </button>
+            </td>
+          </tr>
+        );
+
+        function HeadcountDashboard() {
+          const [data, setData] = useState(INITIAL_DATA);
+          const [viewMode, setViewMode] = useState('map'); 
+          const [searchTerm, setSearchTerm] = useState('');
+          const [selectedTitle, setSelectedTitle] = useState('All'); 
+          const [darkMode, setDarkMode] = useState(false);
+          const [showActiveOnly, setShowActiveOnly] = useState(true);
+          const [loading, setLoading] = useState(false);
+          
+          // Unified Modal State
+          const [modalEmployee, setModalEmployee] = useState(null); 
+          const [modalMode, setModalMode] = useState('view'); // 'view' or 'edit'
+
+          const [expandedStats, setExpandedStats] = useState({}); 
+          const fileInputRef = useRef(null);
+
+          // --- DARK MODE TOGGLE EFFECT (FIXED & CORRECT) ---
+          // This ensures the class is set right away, resolving potential visual lag issues.
+          useEffect(() => {
+            // 1. Initial check and setup
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const savedTheme = localStorage.getItem('theme');
+            let initialDark = false;
+            
+            if (savedTheme === 'dark') {
+                initialDark = true;
+            } else if (savedTheme === null && prefersDark) {
+                initialDark = true;
+            }
+            
+            setDarkMode(initialDark);
+            
+            // Apply class directly to ensure zero flash of incorrect theme
+            if (initialDark) {
+                 document.documentElement.classList.add('dark');
+                 document.body.classList.add('dark:bg-slate-900');
+            } else {
+                 document.documentElement.classList.remove('dark');
+                 document.body.classList.remove('dark:bg-slate-900');
+            }
+          }, []);
+
+          useEffect(() => {
+            // 2. Applies/removes 'dark' class and sets localStorage on state change
+            if (darkMode) {
+              document.documentElement.classList.add('dark');
+              document.body.classList.add('dark:bg-slate-900');
+              localStorage.setItem('theme', 'dark');
+            } else {
+              document.documentElement.classList.remove('dark');
+              document.body.classList.remove('dark:bg-slate-900');
+              localStorage.setItem('theme', 'light');
+            }
+          }, [darkMode]);
+
+
+          // --- FIREBASE ONLY DATA LOADING ---
+          const [firestoreEmployees, setFirestoreEmployees] = useState([]);
+          
+          useEffect(() => {
+            setLoading(true);
+            
+            // 1. Listen to Firebase (Sole Data Source)
+            if (db) {
+                // Fetch only non-deleted employees
+                const employeesCollection = collection(db, "employees");
+                
+                // Using an empty query and filtering out 'deleted' items locally 
+                // because Firestore doesn't allow '!= false' queries easily without index management.
+                const unsubscribe = onSnapshot(employeesCollection, (snapshot) => {
+                    const fbData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+                                              .filter(emp => !emp.deleted); // Filter out soft-deleted items
+                    setFirestoreEmployees(fbData);
+                    setData(fbData); // Set the main data source directly from Firestore
+                    setLoading(false);
+                }, (error) => {
+                    console.error("Firebase Snapshot Error:", error);
+                    setLoading(false);
+                });
+                return () => unsubscribe();
+            } else {
+                // If Firebase initialization failed, stop loading.
+                setLoading(false);
+                console.warn("Firebase is not initialized. Cannot load data.");
+            }
+          }, []);
+
+
+          // --- HANDLERS ---
+          
+          const handleImportCSV = async (csvText) => {
+              if (!db) {
+                  window.alert("Database connection failed. Cannot import data.");
+                  return;
+              }
+              
+              setLoading(true);
+              
+              try {
+                  const employeeData = parseCSV(csvText);
+                  
+                  if (employeeData.length === 0) {
+                      window.alert("No valid employee data found in the CSV. Please ensure the CSV format is correct (using tabs, including headers, and 25 columns per row).");
+                      setLoading(false);
+                      return;
+                  }
+
+                  const batch = writeBatch(db);
+                  const employeesCollection = collection(db, "employees");
+                  
+                  employeeData.forEach((emp) => {
+                      const docRef = doc(employeesCollection, emp.id);
+                      batch.set(docRef, emp, { merge: true });
+                  });
+                  
+                  await batch.commit();
+                  window.alert(`Successfully imported ${employeeData.length} employees into Firebase.`);
+              } catch (error) {
+                  console.error("Error during CSV import to Firebase:", error);
+                  window.alert("Failed to import data. Check the console for details.");
+              } finally {
+                  setLoading(false);
+              }
+          };
+
+          // Handler for one-click import of the embedded file
+          const handleAutoImportCSV = async () => {
+              if (!UPLOADED_DATA_CONTENT) {
+                  window.alert("The embedded data could not be found. Please use the Manual Import (Upload icon) instead.");
+                  return;
+              }
+              
+              const shouldProceed = window.confirm("This will import all embedded records into Firebase, potentially overwriting existing records. Continue?");
+              
+              if (shouldProceed) {
+                  await handleImportCSV(UPLOADED_DATA_CONTENT);
+              }
+          };
+
+          // Handler for the Manual Paste Button
+          const handleManualPaste = () => {
+              const defaultContent = "Paste your CSV data here...";
+              const csvText = window.prompt("Paste your CSV data here (must include header row, copied from Excel or any other source):", defaultContent);
+              
+              if (!csvText || csvText === defaultContent) {
+                  console.log("Manual CSV import cancelled or placeholder text used.");
+                  if (csvText !== defaultContent) {
+                       window.alert("Import cancelled or no data pasted.");
+                  }
+                  return;
+              }
+              
+              handleImportCSV(csvText);
+          };
+
+
+          const handleDelete = async (id) => {
+            // Using window.confirm as it is a standard UI element
+            const shouldDelete = window.confirm("Are you sure you want to delete this employee entry? This cannot be undone."); 
+            if (shouldDelete) {
+                if (db) {
+                    // Soft delete in Firebase
+                    await setDoc(doc(db, "employees", id), { deleted: true, status: "Terminated" }, { merge: true });
+                } else {
+                    // Fallback (shouldn't be needed with this Firebase-first design)
+                    setData(prev => prev.filter(emp => emp.id !== id));
+                }
+            }
+          };
+
+          const handleUpdate = async (updatedEmployee) => {
+            if (db) {
+                // Determine if it's a new entry that needs a real ID
+                let docId = updatedEmployee.id;
+                if (docId.startsWith('NEW-')) {
+                    // Generate a cleaner, more permanent ID for Firestore
+                    docId = updatedEmployee.name.replace(/\s/g, '_').toLowerCase() + '-' + Date.now().toString().slice(-4);
+                }
+
+                // Save to Firebase (merging with existing data)
+                // We ensure 'deleted' status is removed if they edited a deleted record.
+                const { id, deleted, ...cleanData } = JSON.parse(JSON.stringify(updatedEmployee));
+                await setDoc(doc(db, "employees", docId), cleanData, { merge: true });
+            } else {
+                // Fallback for no Firebase (won't happen if Firebase initializes)
+                setData(prev => prev.map(emp => emp.id === updatedEmployee.id ? updatedEmployee : emp));
+            }
+            setModalEmployee(null); 
+          };
+          
+          const handleNewEmployee = () => {
+              if (!db) {
+                  console.error("Cannot add new employee. Firebase is not connected.");
+                  return;
+              }
+              const newId = `NEW-${Date.now()}`;
+              const blankEmployee = {
+                  name: "New Employee",
+                  id: newId,
+                  status: "Active",
+                  title: TITLE_HIERARCHY[TITLE_HIERARCHY.length - 1] || "MX T1", // Default to lowest rank
+                  channel: "MX T1",
+                  team_lead: "",
+                  joining_date: new Date().toISOString().split('T')[0],
+                  photo: ""
+              };
+              setModalEmployee(blankEmployee);
+              setModalMode('edit');
+          };
+
+
+          const openViewModal = (employee) => { setModalEmployee(employee); setModalMode('view'); };
+          const openEditModal = (employee) => { setModalEmployee(employee); setModalMode('edit'); };
+          const closeModal = () => { setModalEmployee(null); };
+
+          const getRoleRank = (title) => {
+            if (!title) return 999;
+            const t = title.toLowerCase();
+            const index = TITLE_HIERARCHY.findIndex(rankTitle => t.includes(rankTitle.toLowerCase()));
+            return index !== -1 ? index : 999;
+          };
+
+          const filterTitles = useMemo(() => {
+            const activeData = data.filter(e => {
+                // Robust status check
+                const statusStr = e.status || "";
+                return statusStr.toLowerCase().replace(/[^a-z]/g, '') === 'active';
+            });
+            const titles = [...new Set(activeData.map(item => item.title))];
+            const cleanTitles = titles.filter(t => t && t.trim() !== '');
+            return ['All', ...cleanTitles.sort((a, b) => getRoleRank(a) - getRoleRank(b))];
+          }, [data]);
+
+          const filteredData = useMemo(() => {
+            const result = data.filter(employee => {
+              const statusStr = employee.status || "";
+              const isActive = statusStr.toLowerCase().replace(/[^a-z]/g, '') === 'active';
+              
+              if (showActiveOnly && !isActive) { return false; }
+              const searchLower = searchTerm.toLowerCase();
+              const matchesSearch = 
+                (employee.name?.toLowerCase() || '').includes(searchLower) || 
+                (employee.title?.toLowerCase() || '').includes(searchLower) ||
+                (employee.id?.toLowerCase() || '').includes(searchLower) ||
+                (employee.team_lead?.toLowerCase() || '').includes(searchLower);
+              const matchesTitle = selectedTitle === 'All' || employee.title === selectedTitle;
+              return matchesSearch && matchesTitle;
+            });
+            return result.sort((a, b) => getRoleRank(a.title) - getRoleRank(b.title));
+          }, [data, searchTerm, selectedTitle, showActiveOnly]);
+
+          const groupedData = useMemo(() => {
+            return filteredData.reduce((acc, employee) => {
+              const key = employee.channel || 'Unassigned';
+              if (!acc[key]) acc[key] = [];
+              acc[key].push(employee);
+              return acc;
+            }, {});
+          }, [filteredData]);
+
+          const lobStats = useMemo(() => {
+            const stats = filteredData.reduce((acc, curr) => {
+              const channel = curr.channel || 'Unassigned';
+              const subChannel = curr.sub_channel;
+              if (!acc[channel]) acc[channel] = { total: 0, subChannels: {}, employees: [] }; 
+              acc[channel].total += 1;
+              acc[channel].employees.push(curr); 
+              if (subChannel) acc[channel].subChannels[subChannel] = (acc[channel].subChannels[subChannel] || 0) + 1;
+              return acc;
+            }, {});
+            return Object.entries(stats).sort((a, b) => b[1].total - a[1].total).map(([name, data]) => ({ name, ...data }));
+          }, [filteredData]);
+
+          const stats = {
+            total: data.length,
+            visible: filteredData.length,
+            // Robust active count
+            active: data.filter(e => {
+                const statusStr = e.status || "";
+                return statusStr.toLowerCase().replace(/[^a-z]/g, '') === 'active';
+            }).length,
+            lobs: Object.keys(groupedData).length
+          };
+
+          const handleExport = () => {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(filteredData, null, 2));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "tempo_export.json");
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            document.body.removeChild(downloadAnchorNode); // Use removeChild for clipboard compatibility
+          };
+
+          const handleSheetLink = () => {
+            // This function is kept for the UI element but serves no purpose now.
+          };
+
+          return (
+            <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200">
+                {modalEmployee && (
+                  <EmployeeModal 
+                    employee={modalEmployee} 
+                    mode={modalMode}
+                    onClose={closeModal} 
+                    onSave={handleUpdate}
+                  />
+                )}
+                <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 shadow-sm">
+                  <div className="max-w-[96%] mx-auto px-4 h-16 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-blue-600 p-2 rounded-lg text-white"><Users size={20} /></div>
+                      {/* --- MODIFIED TITLE HERE --- */}
+                      <h1 className="text-xl font-bold text-slate-800 dark:text-white">Tempo Master Dashboard</h1>
+                      {loading && <div className="loader ml-3"></div>}
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                            <input type="text" placeholder="Search..." className="pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-sm border-transparent focus:bg-white dark:focus:bg-slate-600 border outline-none text-slate-800 dark:text-slate-100 w-full sm:w-64" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                        </div>
+                        
+                        {/* NEW EMPLOYEE BUTTON */}
+                        <button 
+                            onClick={handleNewEmployee}
+                            className="hidden sm:flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-sm shadow-md active:scale-95 duration-150"
+                            title="Add New Employee"
+                        >
+                            <PlusCircle size={18} /> <span className="hidden lg:inline">New Employee</span>
+                        </button>
+                        <button 
+                            onClick={handleNewEmployee}
+                            className="flex sm:hidden p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-md"
+                            title="Add New Employee"
+                        >
+                            <PlusCircle size={20} />
+                        </button>
+
+
+                        <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-lg">
+                            <button onClick={() => setViewMode('map')} className={`p-2 rounded ${viewMode === 'map' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}><MapIcon size={18}/></button>
+                            <button onClick={() => setViewMode('list')} className={`p-2 rounded ${viewMode === 'list' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}><List size={18}/></button>
+                            <button onClick={() => setViewMode('stats')} className={`p-2 rounded ${viewMode === 'stats' ? 'bg-white dark:bg-slate-600 shadow text-blue-600' : 'text-slate-500'}`}><BarChart3 size={18}/></button>
+                        </div>
+                        <button 
+                          onClick={() => setShowActiveOnly(!showActiveOnly)} 
+                          className={`flex gap-2 px-3 py-2 rounded-lg text-sm border ${showActiveOnly ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700' : 'bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600'}`}
+                          title={showActiveOnly ? "Show All Employees" : "Show Active Only"}
+                        >
+                          {showActiveOnly ? <Eye size={18}/> : <EyeOff size={18}/>} <span className="hidden sm:inline">Active Only</span>
+                        </button>
+                        
+                        {/* ONE-CLICK IMPORT BUTTON (Uses embedded file content) */}
+                         <button 
+                            onClick={handleAutoImportCSV} 
+                            className="flex items-center gap-2 px-3 py-2 bg-purple-500 hover:bg-purple-600 text-white font-bold rounded-lg transition-colors text-sm shadow-md active:scale-95 duration-150"
+                            title="Import embedded data into Firebase"
+                        >
+                            <Database size={18} /> <span className="hidden lg:inline">Import Embedded Data</span>
+                        </button>
+                        
+                        {/* MANUAL IMPORT DATA BUTTON (Paste CSV) */}
+                        <button onClick={handleManualPaste} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors" title="Manual Import (Paste CSV)">
+                            <Upload size={18}/>
+                        </button>
+                        
+                        <button onClick={handleExport} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors" title="Export to JSON"><Download size={18}/></button>
+                        
+                        {/* DARK MODE TOGGLE */}
+                        <button onClick={() => setDarkMode(!darkMode)} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors" title="Toggle Dark Mode">
+                          {darkMode ? <Sun size={20} className="text-amber-400"/> : <Moon size={20}/>}
+                        </button>
+                    </div>
+                  </div>
+                </header>
+                <main className="max-w-[96%] mx-auto px-4 py-8">
+                   <div className="mb-6 flex gap-4 items-center justify-between flex-wrap">
+                       <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-3 min-w-[150px]">
+                           <div className="bg-green-100 dark:bg-green-900/30 p-2 rounded text-green-600"><Eye size={20}/></div>
+                           <div>
+                               <p className="text-xs text-slate-500 dark:text-slate-400">Total Employees</p>
+                               <p className="text-xl font-bold dark:text-white">{stats.total}</p>
+                           </div>
+                       </div>
+                       <div className="flex flex-wrap gap-2 items-center overflow-x-auto pb-2 scrollbar-thin">
+                           <Filter size={18} className="text-slate-400 mr-2 flex-shrink-0"/>
+                           {filterTitles.map(t => (
+                               <button key={t} onClick={() => setSelectedTitle(t)} className={`px-3 py-1 rounded-full text-xs border flex-shrink-0 transition-all ${selectedTitle === t ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>{t}</button>
+                           ))}
+                       </div>
+                   </div>
+                   
+                   {/* CONTENT VIEW */}
+                   {filteredData.length === 0 && !loading && (
+                      <div className="text-center p-12 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                          <Search size={48} className="text-slate-300 dark:text-slate-600 mx-auto mb-4"/>
+                          <p className="text-xl font-bold text-slate-600 dark:text-slate-300">No Employees Found</p>
+                          <p className="text-slate-500 dark:text-slate-400">Click 'New Employee' to get started or 'Import Embedded Data' to load from your file.</p>
+                      </div>
+                   )}
+                   
+                   {viewMode === 'stats' && (
+                       <>
+                           <LobChart data={lobStats} />
+                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                               {lobStats.map(lob => (
+                                   <div key={lob.name} className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                                       <div className="flex justify-between mb-4">
+                                           <div><h3 className="font-bold dark:text-white">{lob.name}</h3><p className="text-sm text-slate-500">{lob.total} employees</p></div>
+                                           <Users className="text-blue-500"/>
+                                       </div>
+                                       <div className="w-full bg-slate-100 rounded-full h-2 mb-4"><div className="bg-blue-600 h-2 rounded-full" style={{width: `${(lob.total/stats.visible)*100}%`}}></div></div>
+                                       {/* Toggle to view employees for that LOB */}
+                                       <button onClick={() => setExpandedStats(prev => ({...prev, [lob.name]: !prev[lob.name]}))} className="w-full text-xs flex justify-between items-center py-2 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                                            <span>{expandedStats[lob.name] ? 'Hide Agents' : 'Show Agents'}</span>
+                                            <ChevronDown size={14} className={`transition-transform ${expandedStats[lob.name] ? 'transform rotate-180' : ''}`}/>
+                                       </button>
+                                       
+                                       {expandedStats[lob.name] && (
+                                           <div className="mt-2 space-y-1 max-h-60 overflow-y-auto text-xs scrollbar-thin">
+                                               {lob.employees.map(e => (
+                                                   <div key={e.id} onClick={() => openViewModal(e)} className="p-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded cursor-pointer flex gap-2 items-center transition-colors">
+                                                       <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-[10px] text-blue-600 font-bold flex-shrink-0">{e.name.charAt(0)}</div>
+                                                       <div className="truncate flex-1"><p className="font-medium dark:text-slate-200 truncate">{e.name}</p><p className="text-slate-400 truncate">{e.title}</p></div>
+                                                   </div>
+                                               ))}
+                                           </div>
+                                       )}
+                                   </div>
+                               ))}
+                           </div>
+                       </>
+                   )}
+                   {viewMode === 'map' && (
+                       <div className="space-y-8">
+                           {Object.entries(groupedData).map(([lob, employees]) => (
+                               <div key={lob}>
+                                   <div className="flex items-center gap-4 mb-4">
+                                       <h2 className="text-lg font-bold dark:text-white">{lob}</h2>
+                                       <span className="text-xs bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-full font-semibold">{employees.length}</span>
+                                       <div className="h-px bg-slate-200 dark:bg-slate-700 flex-1"></div>
+                                   </div>
+                                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                                       {employees.map(e => <EmployeeWidget key={e.id} employee={e} onClick={() => openViewModal(e)} onEdit={openEditModal} onDelete={handleDelete}/>)}
+                                   </div>
+                               </div>
+                           ))}
+                       </div>
+                   )}
+                   {viewMode === 'list' && (
+                       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm overflow-x-auto">
+                           <table className="min-w-full text-left text-sm text-slate-600 dark:text-slate-300">
+                               <thead className="bg-slate-50 dark:bg-slate-900 font-semibold text-slate-500 dark:text-slate-400 sticky top-0">
+                                  <tr>
+                                    <th className="px-6 py-3">Employee</th>
+                                    <th className="px-6 py-3">Title</th>
+                                    <th className="px-6 py-3">Supervisor</th>
+                                    <th className="px-6 py-3">Channel</th>
+                                    <th className="px-6 py-3">Start Date</th>
+                                    <th className="px-6 py-3 text-right">Status & Actions</th>
+                                  </tr>
+                               </thead>
+                               <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                   {filteredData.map(e => <EmployeeRow key={e.id} employee={e} onClick={() => openViewModal(e)} onEdit={openEditModal} onDelete={handleDelete}/>)}
+                               </tbody>
+                           </table>
+                       </div>
+                   )}
+                </main>
+            </div>
+          );
+        }
+
+        // ---------------------------------------------------------
+        // REACT MOUNT
+        // ---------------------------------------------------------
+        const container = document.getElementById('root');
+        const root = createRoot(container);
+        root.render(<HeadcountDashboard />);
+    </script>
+</body>
+</html>
