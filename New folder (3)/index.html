@@ -276,9 +276,17 @@
                 const mainText = await fetchWithRetry(`${MAIN_DATA_CSV_URL}&t=${timestamp}`);
                 if (mainText.trim().startsWith("<!DOCTYPE") || mainText.trim().startsWith("<html")) throw new Error("Invalid Main CSV format.");
                 const mainRows = parseCSV(mainText);
+                
+                // UPDATED PARSING: Now reads 5 columns (L1, L2, L3, Desc, SOP Link)
                 const newData = mainRows.slice(1).map(row => {
                     if (row.length < 3) return null; 
-                    return { L1: row[0]?.trim() || "", L2: row[1]?.trim() || "", L3: row[2]?.trim() || "", description: row[3]?.trim() || "" };
+                    return { 
+                        L1: row[0]?.trim() || "", 
+                        L2: row[1]?.trim() || "", 
+                        L3: row[2]?.trim() || "", 
+                        description: row[3]?.trim() || "",
+                        sopLink: row[4]?.trim() || "" // <--- NEW: Reads 5th Column
+                    };
                 }).filter(item => item !== null && item.L1); 
 
                 // 2. Fetch Guide Data
@@ -566,6 +574,16 @@
                 // DYNAMIC LABEL DETECTION
                 const issueOrInquiryLabel = determineRequestNature(descText);
 
+                // SOP Button for Wizard
+                let sopBtnHtml = '';
+                if (finalItem && finalItem.sopLink) {
+                    sopBtnHtml = `
+                        <a href="${finalItem.sopLink}" target="_blank" class="w-full mb-3 py-3 bg-white dark:bg-gray-800 border border-indigo-200 dark:border-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-bold rounded-xl transition-colors flex justify-center items-center gap-2">
+                             ${getIcon('Compass')} View SOP / Guide
+                        </a>
+                    `;
+                }
+
                 container.innerHTML = `
                     <div class="animate-fade-in p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700">
                         <div class="grid grid-cols-2 gap-4 mb-6 text-sm">
@@ -582,6 +600,9 @@
                             <div class="text-xs text-gray-500 uppercase font-bold mb-2">Description</div>
                             <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 leading-relaxed text-sm max-h-40 overflow-y-auto shadow-inner">${descText}</div>
                         </div>
+                        
+                        ${sopBtnHtml}
+                        
                         <button onclick="window.useGuideSelection('${selL1}', '${selL1Plus}', '${selL2}', '${selL3}')" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors shadow-lg flex justify-center items-center gap-2">${getIcon('Check', 'text-white')} Use This Request Type</button>
                     </div>
                 `;
@@ -797,6 +818,18 @@
                 scoreBadge = `<div class="flex items-center gap-2 flex-shrink-0 ml-2">${isBestFit ? `<span class="flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-full border border-indigo-200 dark:border-indigo-800 whitespace-nowrap">${getIcon('Star')} Best Fit</span>` : ''}<span class="text-xs font-bold px-2 py-1 rounded-full ${badgeColor} whitespace-nowrap">${score}% Fit</span></div>`;
             }
             const cardClass = isBestFit ? `best-match relative z-10 shadow-lg ${style.border}` : `${style.border}`;
+            
+            // SOP Button Logic
+            let actionButtons = '';
+            if (req.sopLink) {
+                actionButtons = `
+                    <div class="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700/50 flex justify-end">
+                        <a href="${req.sopLink}" target="_blank" rel="noopener noreferrer" class="text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 dark:text-indigo-300 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+                            ${getIcon('Compass')} View SOP / Guide
+                        </a>
+                    </div>
+                `;
+            }
 
             return `
                 <div class="${style.bg} backdrop-blur-sm p-5 rounded-xl shadow-sm border hover:shadow-md transition-all ${cardClass}">
@@ -813,6 +846,7 @@
                             </div>
                         </div>
                     </div>
+                    ${actionButtons}
                 </div>`;
         }
 
